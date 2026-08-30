@@ -1,0 +1,8 @@
+Flask
+torch
+scikit-learn
+pandas
+numpy
+requests
+openai
+python-dotenv
