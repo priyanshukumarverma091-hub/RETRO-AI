@@ -1,9 +1,21 @@
-
 from flask import Flask, render_template, request, jsonify
-import mysql.connector
+from flask_cors import CORS
+import logging
 import time
 
-from phase2 import MultiAgentSystem
+from phase3 import Phase3Orchestrator
+
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+logger = logging.getLogger("retro-ai")
 
 
 # ============================================================
@@ -11,183 +23,24 @@ from phase2 import MultiAgentSystem
 # ============================================================
 
 app = Flask(__name__)
+CORS(app)
 
 
 # ============================================================
-# DATABASE CONFIGURATION
-# ============================================================
-
-DB_HOST = "localhost"
-DB_USER = "root"
-DB_PASSWORD = "RetroAI@123"
-DB_NAME = "multi_agent_db"
-
-
-# ============================================================
-# MULTI-AGENT ENGINE
+# PHASE 3 INTELLIGENCE ENGINE
 # ============================================================
 
 try:
-    multi_agent = MultiAgentSystem()
+    phase3_engine = Phase3Orchestrator()
     ENGINE_READY = True
-except Exception as error:
-    print("PHASE 2 ERROR:", error)
-    multi_agent = None
-    ENGINE_READY = False
 
-
-# ============================================================
-# DATABASE CONNECTION
-# ============================================================
-
-def get_connection():
-
-    return mysql.connector.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
+except Exception:
+    logger.exception(
+        "PHASE 3 ERROR: failed to initialize Phase3Orchestrator"
     )
 
-
-# ============================================================
-# CREATE CHAT SESSION
-# ============================================================
-
-def create_session(title):
-
-    connection = None
-    cursor = None
-
-    try:
-
-        connection = get_connection()
-        cursor = connection.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO chat_sessions
-            (title)
-            VALUES (%s)
-            """,
-            (title,)
-        )
-
-        connection.commit()
-
-        return cursor.lastrowid
-
-    finally:
-
-        if cursor:
-            cursor.close()
-
-        if connection:
-            connection.close()
-
-
-# ============================================================
-# SAVE MESSAGE
-# ============================================================
-
-def save_message(
-    session_id,
-    role,
-    content,
-    agent=None
-):
-
-    connection = None
-    cursor = None
-
-    try:
-
-        connection = get_connection()
-        cursor = connection.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO messages
-            (
-                session_id,
-                role,
-                content,
-                agent
-            )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                session_id,
-                role,
-                content,
-                agent
-            )
-        )
-
-        connection.commit()
-
-    finally:
-
-        if cursor:
-            cursor.close()
-
-        if connection:
-            connection.close()
-
-
-# ============================================================
-# SAVE AGENT LOG
-# ============================================================
-
-def save_agent_log(
-    session_id,
-    agent_name,
-    task,
-    result,
-    status,
-    execution_time
-):
-
-    connection = None
-    cursor = None
-
-    try:
-
-        connection = get_connection()
-        cursor = connection.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO agent_logs
-            (
-                session_id,
-                agent_name,
-                task,
-                result,
-                status,
-                execution_time_ms
-            )
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (
-                session_id,
-                agent_name,
-                task,
-                result,
-                status,
-                execution_time
-            )
-        )
-
-        connection.commit()
-
-    finally:
-
-        if cursor:
-            cursor.close()
-
-        if connection:
-            connection.close()
+    phase3_engine = None
+    ENGINE_READY = False
 
 
 # ============================================================
@@ -196,10 +49,7 @@ def save_agent_log(
 
 @app.route("/")
 def home():
-
-    return render_template(
-        "index.html"
-    )
+    return render_template("index.html")
 
 
 # ============================================================
@@ -209,237 +59,33 @@ def home():
 @app.route("/api/health")
 def health():
 
-    connection = None
-
-    try:
-
-        connection = get_connection()
-
-        database_status = "connected"
-
-        engine_status = (
-            "connected"
-            if ENGINE_READY
-            else "disconnected"
-        )
-
-        return jsonify({
-
-            "success": True,
-
-            "status": "online",
-
-            "database": database_status,
-
-            "brain": engine_status,
-
-            "phase2": engine_status,
-
-            "system": "RETRO-AI"
-
-        })
-
-    except Exception as error:
-
-        return jsonify({
-
-            "success": False,
-
-            "status": "offline",
-
-            "database": "disconnected",
-
-            "brain": "unknown",
-
-            "phase2": "unknown",
-
-            "error": str(error)
-
-        }), 500
-
-    finally:
-
-        if connection:
-            connection.close()
+    return jsonify({
+        "success": True,
+        "status": "online" if ENGINE_READY else "offline",
+        "brain": "connected" if ENGINE_READY else "disconnected",
+        "phase2": "connected" if ENGINE_READY else "disconnected",
+        "phase3": "connected" if ENGINE_READY else "disconnected",
+        "system": "RETRO-AI"
+    })
 
 
 # ============================================================
-# CHAT API
+# RESULT NORMALIZER
 # ============================================================
 
-@app.route(
-    "/api/chat",
-    methods=["POST"]
-)
-def chat():
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    message = str(
-        data.get(
-            "message",
-            ""
-        )
-    ).strip()
-
-    session_id = data.get(
-        "session_id"
-    )
+def normalize_result(result):
 
     # --------------------------------------------------------
-    # VALIDATE MESSAGE
+    # Dictionary result
     # --------------------------------------------------------
 
-    if not message:
+    if isinstance(result, dict):
 
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "Message cannot be empty."
-
-        }), 400
-
-    # --------------------------------------------------------
-    # CHECK ENGINE
-    # --------------------------------------------------------
-
-    if not ENGINE_READY:
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                "RETRO-AI engine is not available."
-
-        }), 503
-
-    try:
-
-        # ----------------------------------------------------
-        # CREATE SESSION IF REQUIRED
-        # ----------------------------------------------------
-
-        if not session_id:
-
-            session_id = create_session(
-                message[:50]
-            )
-
-        else:
-
-            session_id = int(
-                session_id
-            )
-
-        # ----------------------------------------------------
-        # SAVE USER MESSAGE
-        # ----------------------------------------------------
-
-        save_message(
-            session_id,
-            "user",
-            message
-        )
-
-        # ----------------------------------------------------
-        # EXECUTE MULTI-AGENT ENGINE
-        # ----------------------------------------------------
-
-        start_time = time.time()
-
-        result = multi_agent.execute(
-            message
-        )
-
-        total_time = int(
-            (time.time() - start_time)
-            * 1000
-        )
-
-        # ----------------------------------------------------
-        # FINAL RESPONSE
-        # ----------------------------------------------------
-
-        final_response = result.get(
-            "final_response",
-            ""
-        )
-
-        if not final_response:
-
-            final_response = (
-                "RETRO-AI could not generate "
-                "a final response."
-            )
-
-        # ----------------------------------------------------
-        # AGENTS
-        # ----------------------------------------------------
-
-        agents = result.get(
-            "agents",
-            []
-        )
-
-        agent_string = ", ".join(
-            agents
-        )
-
-        # ----------------------------------------------------
-        # SAVE AI RESPONSE
-        # ----------------------------------------------------
-
-        save_message(
-            session_id,
-            "ai",
-            final_response,
-            agent_string
-        )
-
-        # ----------------------------------------------------
-        # SAVE AGENT EXECUTION LOGS
-        # ----------------------------------------------------
-
-        for agent_result in result.get(
-            "results",
-            []
-        ):
-
-            save_agent_log(
-
-                session_id,
-
-                agent_result.agent_name,
-
-                message,
-
-                agent_result.output,
-
-                agent_result.status,
-
-                agent_result.execution_time_ms
-            )
-
-        # ----------------------------------------------------
-        # RETURN RESPONSE
-        # ----------------------------------------------------
-
-        return jsonify({
-
-            "success": True,
-
-            "session_id": session_id,
-
-            "response": final_response,
-
-            "agent": agent_string,
-
-            "agents": agents,
+        return {
+            "final_response": result.get(
+                "final_response",
+                result.get("response", "")
+            ),
 
             "intent": result.get(
                 "intent",
@@ -448,7 +94,7 @@ def chat():
 
             "goal": result.get(
                 "goal",
-                message
+                ""
             ),
 
             "complexity": result.get(
@@ -461,172 +107,260 @@ def chat():
                 0
             ),
 
-            "execution_time":
-                total_time
+            "agents": result.get(
+                "agents",
+                []
+            ),
 
-        })
+            "reasoning": result.get(
+                "reasoning",
+                []
+            )
+        }
 
-    except ValueError as error:
+    # --------------------------------------------------------
+    # Object result
+    # --------------------------------------------------------
+
+    return {
+        "final_response": getattr(
+            result,
+            "final_response",
+            getattr(result, "response", "")
+        ),
+
+        "intent": getattr(
+            result,
+            "intent",
+            "GENERAL"
+        ),
+
+        "goal": getattr(
+            result,
+            "goal",
+            ""
+        ),
+
+        "complexity": getattr(
+            result,
+            "complexity",
+            0
+        ),
+
+        "confidence": getattr(
+            result,
+            "confidence",
+            0
+        ),
+
+        "agents": getattr(
+            result,
+            "agents",
+            []
+        ),
+
+        "reasoning": getattr(
+            result,
+            "reasoning",
+            []
+        )
+    }
+
+
+# ============================================================
+# CHAT API
+# ============================================================
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+
+    data = request.get_json(silent=True) or {}
+
+    message = str(
+        data.get("message", "")
+    ).strip()
+
+
+    # --------------------------------------------------------
+    # VALIDATION
+    # --------------------------------------------------------
+
+    if not message:
 
         return jsonify({
-
             "success": False,
-
-            "error":
-                "Invalid session ID."
-
+            "error": "Message cannot be empty."
         }), 400
 
-    except Exception as error:
 
-        print()
-        print("CHAT ERROR:")
-        print(error)
-        print()
+    # --------------------------------------------------------
+    # ENGINE CHECK
+    # --------------------------------------------------------
+
+    if not ENGINE_READY:
 
         return jsonify({
-
             "success": False,
-
-            "error":
-                str(error)
-
-        }), 500
+            "error": "RETRO-AI Phase 3 engine is not available."
+        }), 503
 
 
-# ============================================================
-# GET ALL SESSIONS
-# ============================================================
-
-@app.route(
-    "/api/sessions",
-    methods=["GET"]
-)
-def get_sessions():
-
-    connection = None
-    cursor = None
+    # --------------------------------------------------------
+    # PROCESS QUERY
+    # --------------------------------------------------------
 
     try:
 
-        connection = get_connection()
+        start_time = time.time()
 
-        cursor = connection.cursor(
-            dictionary=True
+        result = phase3_engine.process(
+            message
         )
 
-        cursor.execute(
-            """
-            SELECT
-                id,
-                title,
-                created_at,
-                updated_at
-            FROM chat_sessions
-            ORDER BY updated_at DESC
-            """
+        total_time = int(
+            (time.time() - start_time) * 1000
         )
 
-        sessions = cursor.fetchall()
+
+        # ----------------------------------------------------
+        # NORMALIZE
+        # ----------------------------------------------------
+
+        normalized = normalize_result(
+            result
+        )
+
+
+        # ----------------------------------------------------
+        # FINAL RESPONSE
+        # ----------------------------------------------------
+
+        final_response = normalized[
+            "final_response"
+        ]
+
+        if not final_response:
+
+            final_response = (
+                "RETRO-AI processed the request "
+                "but did not generate a final response."
+            )
+
+
+        # ----------------------------------------------------
+        # AGENTS
+        # ----------------------------------------------------
+
+        agents = normalized["agents"]
+
+        if agents is None:
+
+            agents = []
+
+        elif not isinstance(agents, list):
+
+            agents = [str(agents)]
+
+
+        agent_string = ", ".join(
+            str(agent)
+            for agent in agents
+        )
+
+
+        # ----------------------------------------------------
+        # INTENT
+        # ----------------------------------------------------
+
+        intent = normalized[
+            "intent"
+        ]
+
+        if intent is None:
+
+            intent = "GENERAL"
+
+
+        # ----------------------------------------------------
+        # LOG
+        # ----------------------------------------------------
+
+        logger.info(
+            "Query processed | intent=%s | agents=%s | time=%sms",
+            intent,
+            agent_string,
+            total_time
+        )
+
+
+        # ----------------------------------------------------
+        # RESPONSE TO FRONTEND
+        # ----------------------------------------------------
 
         return jsonify({
 
             "success": True,
 
-            "sessions": sessions
+            # Main frontend response
+            "response": final_response,
 
+            # Also expose final_response
+            "final_response": final_response,
+
+            # Agent information
+            "agent": agent_string,
+
+            "agents": agents,
+
+            # Brain information
+            "intent": intent,
+
+            "goal": normalized[
+                "goal"
+            ],
+
+            "complexity": normalized[
+                "complexity"
+            ],
+
+            "confidence": normalized[
+                "confidence"
+            ],
+
+            "reasoning": normalized[
+                "reasoning"
+            ],
+
+            # Performance
+            "execution_time": total_time,
+
+            # Pipeline
+            "pipeline": [
+                "Brain",
+                "Intent Router",
+                "Planner",
+                "Specialist Agents",
+                "Testing",
+                "Reasoning",
+                "Critic",
+                "Final Synthesis"
+            ]
         })
 
+
     except Exception as error:
+
+        logger.exception(
+            "PHASE 3 CHAT ERROR"
+        )
 
         return jsonify({
 
             "success": False,
 
-            "error":
-                str(error)
+            "error": str(error)
 
         }), 500
-
-    finally:
-
-        if cursor:
-            cursor.close()
-
-        if connection:
-            connection.close()
-
-
-# ============================================================
-# GET CONVERSATION
-# ============================================================
-
-@app.route(
-    "/api/conversations/<int:session_id>",
-    methods=["GET"]
-)
-def get_conversation(
-    session_id
-):
-
-    connection = None
-    cursor = None
-
-    try:
-
-        connection = get_connection()
-
-        cursor = connection.cursor(
-            dictionary=True
-        )
-
-        cursor.execute(
-            """
-            SELECT
-                id,
-                role,
-                content,
-                agent,
-                created_at
-            FROM messages
-            WHERE session_id = %s
-            ORDER BY id ASC
-            """,
-            (session_id,)
-        )
-
-        messages = cursor.fetchall()
-
-        return jsonify({
-
-            "success": True,
-
-            "session_id":
-                session_id,
-
-            "messages":
-                messages
-
-        })
-
-    except Exception as error:
-
-        return jsonify({
-
-            "success": False,
-
-            "error":
-                str(error)
-
-        }), 500
-
-    finally:
-
-        if cursor:
-            cursor.close()
-
-        if connection:
-            connection.close()
 
 
 # ============================================================
@@ -640,44 +374,22 @@ if __name__ == "__main__":
     print("RETRO-AI MULTI-AGENT SYSTEM")
     print("=" * 70)
 
-    # --------------------------------------------------------
-    # MYSQL CHECK
-    # --------------------------------------------------------
-
-    try:
-
-        connection = get_connection()
-
-        connection.close()
-
-        print("MYSQL  : CONNECTED")
-
-    except Exception as error:
-
-        print("MYSQL  : ERROR")
-        print(error)
-
-    # --------------------------------------------------------
-    # ENGINE CHECK
-    # --------------------------------------------------------
-
     if ENGINE_READY:
 
         print("BRAIN  : CONNECTED")
         print("PHASE2 : CONNECTED")
+        print("PHASE3 : CONNECTED")
         print("AGENTS : READY")
 
     else:
 
         print("BRAIN  : ERROR")
         print("PHASE2 : ERROR")
+        print("PHASE3 : ERROR")
         print("AGENTS : OFFLINE")
 
     print()
-    print(
-        "SERVER : http://127.0.0.1:5000"
-    )
-
+    print("SERVER : http://127.0.0.1:5000")
     print("=" * 70)
     print()
 
@@ -686,4 +398,3 @@ if __name__ == "__main__":
         port=5000,
         debug=True
     )
-

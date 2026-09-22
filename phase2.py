@@ -1,16 +1,18 @@
 # ============================================================
 # RETRO-AI PHASE 2
-# MULTI-AGENT INTELLIGENCE ENGINE
+# MULTI-AGENT INTELLIGENCE SYSTEM
 # ============================================================
 
-from dataclasses import dataclass
-from typing import List, Optional
-import time
+import ast
+import json
 import re
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 
 # ============================================================
-# OPTIONAL BRAIN
+# OPTIONAL INTELLIGENCE BRAIN
 # ============================================================
 
 try:
@@ -20,15 +22,16 @@ except Exception:
 
 
 # ============================================================
-# AGENT RESULT
+# RESULT OBJECT
 # ============================================================
 
 @dataclass
 class AgentResult:
     agent_name: str
-    status: str
+    intent: str
+    success: bool
     output: str
-    execution_time_ms: int
+    metadata: Dict[str, Any]
 
 
 # ============================================================
@@ -37,48 +40,137 @@ class AgentResult:
 
 class BaseAgent:
 
-    def __init__(self, name):
+    def __init__(self, name: str):
         self.name = name
 
-    def execute(self, query, previous_results=None):
-
-        start = time.time()
-
-        try:
-            output = self.generate_response(
-                query,
-                previous_results or []
-            )
-
-            status = "success"
-
-        except Exception as error:
-
-            output = f"{self.name} error: {error}"
-            status = "error"
-
-        elapsed = int(
-            (time.time() - start) * 1000
-        )
-
-        return AgentResult(
-            agent_name=self.name,
-            status=status,
-            output=output,
-            execution_time_ms=elapsed
-        )
-
-    def generate_response(
+    def run(
         self,
-        query,
-        previous_results
-    ):
-
-        return "No response generated."
+        query: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> AgentResult:
+        raise NotImplementedError
 
 
 # ============================================================
-# ML AGENT
+# HELPERS
+# ============================================================
+
+def normalize_intent(intent: str) -> str:
+
+    value = str(intent).strip().lower()
+
+    mapping = {
+        "ml": "MACHINE_LEARNING",
+        "machine learning": "MACHINE_LEARNING",
+        "machine_learning": "MACHINE_LEARNING",
+        "machine-learning": "MACHINE_LEARNING",
+        "machinelearning": "MACHINE_LEARNING",
+
+        "coding": "CODING",
+        "code": "CODING",
+        "programming": "CODING",
+
+        "data analysis": "DATA_ANALYSIS",
+        "data_analysis": "DATA_ANALYSIS",
+        "data-analysis": "DATA_ANALYSIS",
+        "dataanalysis": "DATA_ANALYSIS",
+
+        "research": "RESEARCH",
+
+        "general": "GENERAL",
+        "chat": "GENERAL",
+    }
+
+    return mapping.get(value, value.upper())
+
+
+def normalize_agent_name(name: str) -> str:
+
+    value = str(name).strip().lower()
+
+    mapping = {
+        "ml": "MLAgent",
+        "mlagent": "MLAgent",
+        "machine_learning": "MLAgent",
+        "machinelearning": "MLAgent",
+
+        "coding": "CodingAgent",
+        "codingagent": "CodingAgent",
+        "code": "CodingAgent",
+
+        "data_analysis": "DataAnalysisAgent",
+        "dataanalysis": "DataAnalysisAgent",
+        "dataanalysisagent": "DataAnalysisAgent",
+
+        "research": "ResearchAgent",
+        "researchagent": "ResearchAgent",
+
+        "reasoning": "ReasoningAgent",
+        "reasoningagent": "ReasoningAgent",
+
+        "critic": "CriticAgent",
+        "criticagent": "CriticAgent",
+
+        "general": "GeneralAgent",
+        "generalagent": "GeneralAgent",
+    }
+
+    return mapping.get(value, name)
+
+
+def validate_python_code(code: str) -> Dict[str, Any]:
+
+    result = {
+        "valid": False,
+        "error": None,
+        "functions": [],
+        "classes": [],
+        "imports": [],
+    }
+
+    try:
+
+        tree = ast.parse(code)
+
+        result["valid"] = True
+
+        for node in ast.walk(tree):
+
+            if isinstance(
+                node,
+                (ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                result["functions"].append(node.name)
+
+            elif isinstance(node, ast.ClassDef):
+                result["classes"].append(node.name)
+
+            elif isinstance(node, ast.Import):
+
+                for alias in node.names:
+                    result["imports"].append(alias.name)
+
+            elif isinstance(node, ast.ImportFrom):
+
+                if node.module:
+                    result["imports"].append(node.module)
+
+    except SyntaxError as exc:
+
+        result["error"] = (
+            f"{exc.msg} "
+            f"at line {exc.lineno}, column {exc.offset}"
+        )
+
+    except Exception as exc:
+
+        result["error"] = str(exc)
+
+    return result
+
+
+# ============================================================
+# MACHINE LEARNING AGENT
 # ============================================================
 
 class MLAgent(BaseAgent):
@@ -86,207 +178,249 @@ class MLAgent(BaseAgent):
     def __init__(self):
         super().__init__("MLAgent")
 
-    def generate_response(
+    def run(
         self,
-        query,
-        previous_results
-    ):
+        query: str,
+        context=None
+    ) -> AgentResult:
 
         q = query.lower()
 
-        if (
-            "99%" in q
-            and "70%" in q
-            and "training" in q
-            and "validation" in q
-        ):
+        output = []
 
-            return """ML ANALYSIS
+        output.append("MACHINE LEARNING AGENT")
+        output.append("=" * 45)
 
-The model is most likely overfitting.
-
-Evidence:
-- Training accuracy: 99%
-- Validation accuracy: 70%
-- Generalization gap: 29 percentage points
-
-The model performs extremely well on training data but
-poorly on unseen validation data.
-
-Possible causes:
-1. Overfitting
-2. Data leakage
-3. Incorrect validation split
-4. Distribution mismatch
-5. Excessive model complexity
-
-Recommended solution:
-1. Check data leakage.
-2. Verify the train/validation split.
-3. Verify preprocessing consistency.
-4. Apply regularization.
-5. Use dropout for neural networks.
-6. Use early stopping.
-7. Reduce model complexity if appropriate.
-8. Use cross-validation.
-9. Increase training data if possible.
-10. Evaluate once on an untouched test set.
-
-Conclusion:
-The model currently has poor generalization despite
-its high training accuracy."""
+        # ----------------------------------------------------
+        # FRAUD / IMBALANCED CLASSIFICATION
+        # ----------------------------------------------------
 
         if (
             "fraud" in q
-            and "99.5" in q
-            and "20%" in q
+            or "imbalance" in q
+            or "imbalanced" in q
         ):
 
-            return """ML ANALYSIS
+            output.append(
+                "\nProblem type:"
+            )
 
-The model should not be considered good based only on
-99.5% accuracy.
+            output.append(
+                "Binary classification with possible severe class imbalance."
+            )
 
-It detects only 20% of actual fraud cases.
+            output.append(
+                "\nRecommended evaluation metrics:"
+            )
 
-This indicates very poor recall for the fraud class.
+            output.append(
+                "1. Precision"
+            )
 
-Accuracy can be misleading when the dataset is highly
-imbalanced.
+            output.append(
+                "2. Recall"
+            )
 
-Important metrics:
-- Precision
-- Recall
-- F1-score
-- PR-AUC
-- Confusion Matrix
+            output.append(
+                "3. F1-score"
+            )
 
-Recommended actions:
-1. Inspect the confusion matrix.
-2. Measure minority-class recall.
-3. Tune the classification threshold.
-4. Try class weighting.
-5. Try appropriate resampling.
-6. Improve fraud-related features.
+            output.append(
+                "4. ROC-AUC"
+            )
 
-Conclusion:
-For fraud detection, missing actual fraud cases is often
-more important than maximizing overall accuracy."""
+            output.append(
+                "5. PR-AUC"
+            )
 
-        if any(
-            word in q
-            for word in [
-                "improve accuracy",
-                "improve model",
-                "optimize model",
-                "optimize",
-                "model performance"
-            ]
+            output.append(
+                "6. Confusion Matrix"
+            )
+
+            output.append(
+                "\nEvaluation reasoning:"
+            )
+
+            output.append(
+                "Accuracy alone can be misleading when fraudulent "
+                "transactions represent a small fraction of all transactions."
+            )
+
+            output.append(
+                "Recall measures how many actual fraud cases are detected."
+            )
+
+            output.append(
+                "Precision measures how many transactions predicted as "
+                "fraud are actually fraudulent."
+            )
+
+            output.append(
+                "PR-AUC is particularly informative when the positive "
+                "class is rare."
+            )
+
+            output.append(
+                "\nRecommended workflow:"
+            )
+
+            output.append(
+                "1. Split data using stratification."
+            )
+
+            output.append(
+                "2. Prevent data leakage."
+            )
+
+            output.append(
+                "3. Establish a baseline."
+            )
+
+            output.append(
+                "4. Evaluate precision, recall and F1."
+            )
+
+            output.append(
+                "5. Inspect ROC-AUC and PR-AUC."
+            )
+
+            output.append(
+                "6. Tune the decision threshold."
+            )
+
+            output.append(
+                "7. Analyze the confusion matrix."
+            )
+
+            output.append(
+                "8. Validate on untouched test data."
+            )
+
+        # ----------------------------------------------------
+        # OVERFITTING
+        # ----------------------------------------------------
+
+        elif (
+            "overfit" in q
+            or "overfitting" in q
         ):
 
-            return """ML ANALYSIS
+            output.append(
+                "Problem type: Model generalization / overfitting."
+            )
 
-Machine Learning Optimization
+            output.append(
+                "\nDiagnostic steps:"
+            )
 
-1. Inspect data quality.
-2. Check missing values.
-3. Check duplicates.
-4. Check class imbalance.
-5. Investigate outliers.
-6. Perform feature engineering.
-7. Apply suitable preprocessing.
-8. Verify train/validation/test splits.
-9. Check data leakage.
-10. Apply cross-validation.
-11. Tune hyperparameters.
-12. Compare suitable models.
-13. Check overfitting and underfitting.
-14. Evaluate accuracy, precision, recall and F1-score.
+            output.append(
+                "1. Compare training and validation loss."
+            )
 
-The objective is strong generalization on unseen data."""
+            output.append(
+                "2. Compare training and validation metrics."
+            )
 
-        if "neural network" in q:
+            output.append(
+                "3. Measure the generalization gap."
+            )
 
-            return """ML ANALYSIS
+            output.append(
+                "4. Inspect model complexity."
+            )
 
-A neural network is a machine learning model composed
-of interconnected neurons.
+            output.append(
+                "5. Check dataset size and quality."
+            )
 
-Main components:
-- Input layer
-- Hidden layers
-- Output layer
+            output.append(
+                "\nPossible interventions:"
+            )
 
-Training:
-Input → Forward Pass → Loss → Backpropagation
-→ Optimizer → Weight Update
+            output.append(
+                "- Dropout"
+            )
 
-The process repeats until the model reaches suitable
-performance."""
+            output.append(
+                "- L1/L2 regularization"
+            )
 
-        if (
-            "classification" in q
-            or "classify" in q
-        ):
+            output.append(
+                "- Early stopping"
+            )
 
-            return """ML ANALYSIS
+            output.append(
+                "- Data augmentation"
+            )
 
-Classification is a supervised learning task where a
-model predicts a discrete class.
+            output.append(
+                "- Smaller architecture"
+            )
 
-Examples:
-- Spam / Not Spam
-- Fraud / Not Fraud
-- Cat / Dog
+            output.append(
+                "- More representative data"
+            )
 
-Common algorithms:
-- Logistic Regression
-- Decision Tree
-- Random Forest
-- SVM
-- Neural Network
+        # ----------------------------------------------------
+        # GENERAL ML
+        # ----------------------------------------------------
 
-Metrics:
-- Accuracy
-- Precision
-- Recall
-- F1-score
-- ROC-AUC
-- PR-AUC"""
+        else:
 
-        if "regression" in q:
+            output.append(
+                "Problem type: General machine-learning task."
+            )
 
-            return """ML ANALYSIS
+            output.append(
+                "\nRecommended workflow:"
+            )
 
-Regression predicts a continuous numerical value.
+            output.append(
+                "1. Define target."
+            )
 
-Common algorithms:
-- Linear Regression
-- Random Forest
-- Gradient Boosting
-- XGBoost
-- Neural Networks
+            output.append(
+                "2. Inspect dataset."
+            )
 
-Metrics:
-- MAE
-- MSE
-- RMSE
-- R²"""
+            output.append(
+                "3. Preprocess features."
+            )
 
-        return """ML ANALYSIS
+            output.append(
+                "4. Establish baseline."
+            )
 
-The ML problem should be approached through:
+            output.append(
+                "5. Train model."
+            )
 
-1. Problem definition
-2. Data inspection
-3. Data preprocessing
-4. Feature engineering
-5. Model selection
-6. Training
-7. Validation
-8. Evaluation
-9. Error analysis
-10. Generalization testing"""
+            output.append(
+                "6. Validate model."
+            )
+
+            output.append(
+                "7. Perform error analysis."
+            )
+
+            output.append(
+                "8. Evaluate on held-out test data."
+            )
+
+        return AgentResult(
+            agent_name=self.name,
+            intent="MACHINE_LEARNING",
+            success=True,
+            output="\n".join(output),
+            metadata={
+                "domain": "machine_learning",
+                "fraud_related": (
+                    "fraud" in q
+                    or "imbalance" in q
+                    or "imbalanced" in q
+                ),
+            },
+        )
 
 
 # ============================================================
@@ -298,45 +432,34 @@ class CodingAgent(BaseAgent):
     def __init__(self):
         super().__init__("CodingAgent")
 
-    # ========================================================
-    # PRIME
-    # ========================================================
+    def generate_code(
+        self,
+        query: str
+    ) -> Tuple[str, str]:
 
-    def prime(self):
+        q = query.lower()
 
-        return '''def is_prime(n):
+        if "prime" in q:
+
+            return (
+'''def is_prime(n):
     if n < 2:
         return False
 
-    if n == 2:
-        return True
-
-    if n % 2 == 0:
-        return False
-
-    divisor = 3
-
-    while divisor * divisor <= n:
-        if n % divisor == 0:
+    for i in range(2, int(n ** 0.5) + 1):
+        if n % i == 0:
             return False
 
-        divisor += 2
-
     return True
+''',
+                "Checks divisibility up to sqrt(n), "
+                "giving O(sqrt(n)) time complexity."
+            )
 
+        if "duplicate" in q:
 
-if __name__ == "__main__":
-    number = int(input("Enter a number: "))
-    print(is_prime(number))
-'''
-
-    # ========================================================
-    # DUPLICATES
-    # ========================================================
-
-    def duplicates(self):
-
-        return '''def find_duplicates(items):
+            return (
+'''def find_duplicates(items):
     seen = set()
     duplicates = set()
 
@@ -347,509 +470,213 @@ if __name__ == "__main__":
             seen.add(item)
 
     return list(duplicates)
+''',
+                "Uses a set for efficient membership checks "
+                "with average O(n) time complexity."
+            )
 
+        if "second largest" in q:
 
-if __name__ == "__main__":
-    values = [1, 2, 3, 2, 4, 3]
-    print(find_duplicates(values))
-'''
+            return (
+'''def second_largest(numbers):
+    unique_numbers = set(numbers)
 
-    # ========================================================
-    # SECOND LARGEST
-    # ========================================================
+    if len(unique_numbers) < 2:
+        raise ValueError(
+            "At least two distinct values are required."
+        )
 
-    def second_largest(self):
+    unique_numbers.remove(max(unique_numbers))
 
-        return '''def second_largest(numbers):
-    unique_values = set(numbers)
+    return max(unique_numbers)
+''',
+                "Finds the second-largest distinct value."
+            )
 
-    if len(unique_values) < 2:
-        return None
+        if "factorial" in q:
 
-    largest = None
-    second = None
-
-    for number in unique_values:
-
-        if largest is None or number > largest:
-            second = largest
-            largest = number
-
-        elif second is None or number > second:
-            second = number
-
-    return second
-
-
-if __name__ == "__main__":
-    values = [10, 5, 8, 10, 3, 8]
-    print(second_largest(values))
-'''
-
-    # ========================================================
-    # FACTORIAL
-    # ========================================================
-
-    def factorial(self):
-
-        return '''def factorial(n):
+            return (
+'''def factorial(n):
     if n < 0:
         raise ValueError(
-            "Factorial is not defined for negative numbers."
+            "Factorial is undefined for negative numbers."
         )
 
     result = 1
 
-    for value in range(2, n + 1):
-        result *= value
+    for i in range(2, n + 1):
+        result *= i
 
     return result
+''',
+                "Iterative factorial with O(n) time "
+                "and O(1) auxiliary space."
+            )
 
+        if "fibonacci" in q:
 
-if __name__ == "__main__":
-    print(factorial(5))
-'''
-
-    # ========================================================
-    # FIBONACCI
-    # ========================================================
-
-    def fibonacci(self):
-
-        return '''def fibonacci(n):
+            return (
+'''def fibonacci(n):
     if n < 0:
         raise ValueError(
             "n must be non-negative."
         )
 
-    sequence = []
-
-    a = 0
-    b = 1
+    a, b = 0, 1
 
     for _ in range(n):
-        sequence.append(a)
         a, b = b, a + b
 
-    return sequence
-
-
-if __name__ == "__main__":
-    print(fibonacci(10))
-'''
-
-    # ========================================================
-    # PALINDROME
-    # ========================================================
-
-    def palindrome(self):
-
-        return '''def is_palindrome(text):
-    cleaned = "".join(
-        character.lower()
-        for character in text
-        if character.isalnum()
-    )
-
-    return cleaned == cleaned[::-1]
-
-
-if __name__ == "__main__":
-    print(is_palindrome("madam"))
-'''
-
-    # ========================================================
-    # SORT
-    # ========================================================
-
-    def sorting(self):
-
-        return '''def sort_numbers(numbers):
-    result = numbers.copy()
-
-    for i in range(len(result)):
-
-        for j in range(
-            0,
-            len(result) - i - 1
-        ):
-
-            if result[j] > result[j + 1]:
-
-                result[j], result[j + 1] = (
-                    result[j + 1],
-                    result[j]
-                )
-
-    return result
-
-
-if __name__ == "__main__":
-    values = [5, 2, 9, 1, 3]
-    print(sort_numbers(values))
-'''
-
-    # ========================================================
-    # CSV
-    # ========================================================
-
-    def csv_analysis(self):
-
-        return '''import pandas as pd
-
-
-def analyze_csv(file_path):
-    data = pd.read_csv(file_path)
-
-    print("Shape:", data.shape)
-
-    print("\\nColumns:")
-    print(data.columns.tolist())
-
-    print("\\nData Types:")
-    print(data.dtypes)
-
-    print("\\nMissing Values:")
-    print(data.isnull().sum())
-
-    print(
-        "\\nDuplicate Rows:",
-        data.duplicated().sum()
-    )
-
-    print("\\nFirst Five Rows:")
-    print(data.head())
-
-    return data
-
-
-if __name__ == "__main__":
-    analyze_csv("data.csv")
-'''
-
-    # ========================================================
-    # ML CODE
-    # ========================================================
-
-    def ml_code(self):
-
-        return '''import pandas as pd
-
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score
-)
-
-
-def train_model(file_path, target_column):
-
-    data = pd.read_csv(file_path)
-
-    if target_column not in data.columns:
-        raise ValueError(
-            f"Target column '{target_column}' not found."
-        )
-
-    data = data.dropna()
-
-    X = data.drop(columns=[target_column])
-    y = data[target_column]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y
-    )
-
-    model = RandomForestClassifier(
-        n_estimators=200,
-        random_state=42
-    )
-
-    model.fit(X_train, y_train)
-
-    predictions = model.predict(X_test)
-
-    print("Accuracy:",
-          accuracy_score(y_test, predictions))
-
-    print("Precision:",
-          precision_score(
-              y_test,
-              predictions,
-              average="weighted",
-              zero_division=0
-          ))
-
-    print("Recall:",
-          recall_score(
-              y_test,
-              predictions,
-              average="weighted",
-              zero_division=0
-          ))
-
-    print("F1:",
-          f1_score(
-              y_test,
-              predictions,
-              average="weighted",
-              zero_division=0
-          ))
-
-    return model
-
-
-if __name__ == "__main__":
-    train_model(
-        "data.csv",
-        "target"
-    )
-'''
-
-    # ========================================================
-    # DEBUG
-    # ========================================================
-
-    def debugging(self):
-
-        return """CODING DEBUG ANALYSIS
-
-1. Read the complete traceback.
-2. Identify the file.
-3. Identify the line number.
-4. Identify the exception type.
-5. Inspect the variables.
-6. Check imports.
-7. Check data types.
-8. Reproduce the problem.
-9. Apply the smallest correct fix.
-10. Run the program again.
-11. Verify the expected output.
-
-Common problems:
-- SyntaxError
-- NameError
-- TypeError
-- ValueError
-- ImportError
-- FileNotFoundError
-- IndentationError
-- Unterminated string"""
-
-    # ========================================================
-    # CODE RESPONSE FORMAT
-    # ========================================================
-
-    def format_code(self, code):
-
-        return (
-            "IMPLEMENTATION\n\n"
-            "```python\n"
-            + code
-            + "```\n\n"
-            "TEST RESULT\n\n"
-            "Syntax test: PASSED\n"
-            "Completeness test: PASSED\n"
-            "Execution structure test: PASSED\n"
-            "Functions detected: "
-            + str(
-                len(
-                    re.findall(
-                        r"^def\s+\w+",
-                        code,
-                        re.MULTILINE
-                    )
-                )
+    return a
+''',
+                "Iterative Fibonacci implementation with O(n) time."
             )
-            + "\n\n"
-            "Status: PASSED"
-        )
-
-    # ========================================================
-    # GENERATE RESPONSE
-    # ========================================================
-
-    def generate_response(
-        self,
-        query,
-        previous_results
-    ):
-
-        q = query.lower().strip()
-
-        # ----------------------------------------------------
-        # DEBUGGING
-        # ----------------------------------------------------
-
-        if any(
-            word in q
-            for word in [
-                "debug",
-                "traceback",
-                "syntaxerror",
-                "exception",
-                "bug",
-                "error"
-            ]
-        ):
-
-            return self.debugging()
-
-        # ----------------------------------------------------
-        # SECOND LARGEST
-        # ----------------------------------------------------
-
-        if (
-            "second largest" in q
-            or "second-largest" in q
-        ):
-
-            return self.format_code(
-                self.second_largest()
-            )
-
-        # ----------------------------------------------------
-        # DUPLICATES
-        # ----------------------------------------------------
-
-        if (
-            "duplicate" in q
-            or "duplicates" in q
-        ):
-
-            return self.format_code(
-                self.duplicates()
-            )
-
-        # ----------------------------------------------------
-        # PRIME
-        # ----------------------------------------------------
-
-        if "prime" in q:
-
-            return self.format_code(
-                self.prime()
-            )
-
-        # ----------------------------------------------------
-        # FACTORIAL
-        # ----------------------------------------------------
-
-        if "factorial" in q:
-
-            return self.format_code(
-                self.factorial()
-            )
-
-        # ----------------------------------------------------
-        # FIBONACCI
-        # ----------------------------------------------------
-
-        if "fibonacci" in q:
-
-            return self.format_code(
-                self.fibonacci()
-            )
-
-        # ----------------------------------------------------
-        # PALINDROME
-        # ----------------------------------------------------
 
         if "palindrome" in q:
 
-            return self.format_code(
-                self.palindrome()
+            return (
+'''def is_palindrome(text):
+    normalized = ''.join(
+        char.lower()
+        for char in text
+        if char.isalnum()
+    )
+
+    return normalized == normalized[::-1]
+''',
+                "Normalizes input and compares it with its reverse."
             )
-
-        # ----------------------------------------------------
-        # SORTING
-        # ----------------------------------------------------
-
-        if (
-            "sorting" in q
-            or "sort numbers" in q
-            or "sort a list" in q
-        ):
-
-            return self.format_code(
-                self.sorting()
-            )
-
-        # ----------------------------------------------------
-        # CSV
-        # ----------------------------------------------------
 
         if "csv" in q:
 
-            return self.format_code(
-                self.csv_analysis()
+            return (
+'''import csv
+
+def read_csv_file(file_path):
+    with open(
+        file_path,
+        "r",
+        newline="",
+        encoding="utf-8"
+    ) as file:
+
+        reader = csv.DictReader(file)
+
+        return list(reader)
+''',
+                "Uses csv.DictReader to return CSV rows as dictionaries."
             )
 
-        # ----------------------------------------------------
-        # MACHINE LEARNING CODE
-        # ----------------------------------------------------
+        return (
+'''def solution():
+    """
+    Implement the requested logic here.
+    """
+    pass
+''',
+            "A generic Python solution template was generated "
+            "because no specific algorithm was identified."
+        )
 
-        if (
-            "machine learning code" in q
-            or "ml code" in q
-            or (
-                "train" in q
-                and "model" in q
-                and "code" in q
+    def run(
+        self,
+        query: str,
+        context=None
+    ) -> AgentResult:
+
+        code, explanation = self.generate_code(query)
+
+        validation = validate_python_code(code)
+
+        output = []
+
+        output.append("CODING AGENT")
+        output.append("=" * 45)
+
+        output.append(
+            "\nIMPLEMENTATION"
+        )
+
+        output.append(
+            "-" * 45
+        )
+
+        output.append(
+            "```python"
+        )
+
+        output.append(code)
+
+        output.append(
+            "```"
+        )
+
+        output.append(
+            "\nANALYSIS"
+        )
+
+        output.append(
+            "-" * 45
+        )
+
+        output.append(
+            explanation
+        )
+
+        output.append(
+            "\nVALIDATION"
+        )
+
+        output.append(
+            "-" * 45
+        )
+
+        if validation["valid"]:
+
+            output.append(
+                "Syntax test: PASSED"
             )
-        ):
 
-            return self.format_code(
-                self.ml_code()
+            if validation["functions"]:
+
+                output.append(
+                    "Functions detected: "
+                    + ", ".join(
+                        validation["functions"]
+                    )
+                )
+
+            if validation["imports"]:
+
+                output.append(
+                    "Imports detected: "
+                    + ", ".join(
+                        validation["imports"]
+                    )
+                )
+
+        else:
+
+            output.append(
+                "Syntax test: FAILED"
             )
 
-        # ----------------------------------------------------
-        # GENERIC PYTHON REQUEST
-        # ----------------------------------------------------
+            output.append(
+                f"Error: {validation['error']}"
+            )
 
-        if (
-            "python" in q
-            or "python code" in q
-        ):
-
-            return """CODING ANALYSIS
-
-The request is recognized as a Python coding task.
-
-Please provide the exact algorithm/problem requirements
-so the CodingAgent can generate the task-specific
-implementation."""
-
-        # ----------------------------------------------------
-        # GENERIC CODE
-        # ----------------------------------------------------
-
-        if (
-            "write code" in q
-            or "give me code" in q
-            or "implement" in q
-            or "program" in q
-        ):
-
-            return """CODING ANALYSIS
-
-The request is recognized as a coding task.
-
-The CodingAgent requires the exact problem statement,
-inputs, outputs and constraints for a task-specific
-implementation."""
-
-        return """CODING ANALYSIS
-
-No coding task was identified."""
+        return AgentResult(
+            agent_name=self.name,
+            intent="CODING",
+            success=validation["valid"],
+            output="\n".join(output),
+            metadata={
+                "syntax_valid": validation["valid"],
+                "functions": validation["functions"],
+                "imports": validation["imports"],
+                "code": code,
+            },
+        )
 
 
 # ============================================================
@@ -861,28 +688,47 @@ class DataAnalysisAgent(BaseAgent):
     def __init__(self):
         super().__init__("DataAnalysisAgent")
 
-    def generate_response(
+    def run(
         self,
-        query,
-        previous_results
-    ):
+        query: str,
+        context=None
+    ) -> AgentResult:
 
-        return """DATA ANALYSIS
+        output = [
+            "DATA ANALYSIS AGENT",
+            "=" * 45,
+            "",
+            "Recommended analysis pipeline:",
+            "1. Load the dataset.",
+            "2. Inspect shape, columns and data types.",
+            "3. Detect missing values.",
+            "4. Identify duplicates.",
+            "5. Inspect numerical distributions.",
+            "6. Inspect categorical variables.",
+            "7. Analyze correlations.",
+            "8. Detect potential outliers.",
+            "9. Perform feature engineering if required.",
+            "10. Generate conclusions from actual observations.",
+        ]
 
-Recommended workflow:
+        if "csv" in query.lower():
 
-1. Inspect dataset dimensions.
-2. Inspect column types.
-3. Check missing values.
-4. Check duplicate rows.
-5. Check unique values.
-6. Generate statistical summary.
-7. Detect outliers.
-8. Analyze distributions.
-9. Analyze correlations.
-10. Check target distribution.
-11. Investigate possible data leakage.
-12. Prepare features for modeling."""
+            output.extend([
+                "",
+                "CSV-specific recommendation:",
+                "Use pandas.read_csv() and validate "
+                "column types before analysis.",
+            ])
+
+        return AgentResult(
+            agent_name=self.name,
+            intent="DATA_ANALYSIS",
+            success=True,
+            output="\n".join(output),
+            metadata={
+                "workflow_complete": True
+            },
+        )
 
 
 # ============================================================
@@ -894,249 +740,39 @@ class ResearchAgent(BaseAgent):
     def __init__(self):
         super().__init__("ResearchAgent")
 
-    def generate_response(
+    def run(
         self,
-        query,
-        previous_results
-    ):
+        query: str,
+        context=None
+    ) -> AgentResult:
 
-        return """RESEARCH ANALYSIS
-
-Research workflow:
-
-1. Define the research question.
-2. Find relevant sources.
-3. Prefer authoritative sources.
-4. Cross-check important claims.
-5. Compare conflicting evidence.
-6. Identify limitations.
-7. Separate facts from assumptions.
-8. Produce an evidence-based conclusion."""
-
-
-# ============================================================
-# REASONING AGENT
-# ============================================================
-
-class ReasoningAgent(BaseAgent):
-
-    def __init__(self):
-        super().__init__("ReasoningAgent")
-
-    def generate_response(
-        self,
-        query,
-        previous_results
-    ):
-
-        q = query.lower()
-
-        # ----------------------------------------------------
-        # OVERFITTING
-        # ----------------------------------------------------
-
-        if (
-            "99%" in q
-            and "70%" in q
-            and "training" in q
-            and "validation" in q
-        ):
-
-            return """REASONING ANALYSIS
-
-Observation:
-Training accuracy is 99%, while validation accuracy is
-only 70%.
-
-Inference:
-There is a 29 percentage-point generalization gap.
-
-Most likely cause:
-Overfitting.
-
-Alternative causes that must also be checked:
-- Data leakage
-- Incorrect validation split
-- Distribution shift
-- Preprocessing mismatch
-
-Decision:
-The system should not optimize for training accuracy.
-It should optimize for validation and test generalization.
-
-Priority:
-1. Check data leakage.
-2. Verify data splitting.
-3. Verify preprocessing.
-4. Check distribution differences.
-5. Apply regularization.
-6. Consider reducing model complexity.
-7. Use cross-validation.
-8. Increase training data if possible.
-
-Conclusion:
-The model is overfitting or otherwise failing to
-generalize to unseen data."""
-
-        # ----------------------------------------------------
-        # FRAUD
-        # ----------------------------------------------------
-
-        if (
-            "fraud" in q
-            and "99.5" in q
-            and "20%" in q
-        ):
-
-            return """REASONING ANALYSIS
-
-Observation:
-Accuracy is 99.5%, but fraud recall is approximately
-20%.
-
-Inference:
-The model is likely dominated by the majority
-non-fraud class.
-
-Critical issue:
-Approximately 80% of actual fraud cases may be missed.
-
-Therefore:
-Accuracy is not an adequate primary success criterion.
-
-Priority metrics:
-1. Recall
-2. Precision
-3. F1-score
-4. PR-AUC
-5. Confusion Matrix
-
-Recommended direction:
-Tune the decision threshold and investigate class
-weighting, resampling and better features.
-
-Conclusion:
-The model is not satisfactory for fraud detection
-despite its high overall accuracy."""
-
-        # ----------------------------------------------------
-        # USE PREVIOUS AGENT OUTPUTS
-        # ----------------------------------------------------
-
-        useful = [
-
-            result
-
-            for result in previous_results
-
-            if (
-                result.status == "success"
-                and result.agent_name
-                != "ReasoningAgent"
-            )
-        ]
-
-        if not useful:
-
-            return """REASONING ANALYSIS
-
-No specialist evidence was available.
-
-A reliable conclusion requires evidence before
-reasoning and decision-making."""
-
-        lines = [
-            "REASONING ANALYSIS",
+        output = [
+            "RESEARCH AGENT",
+            "=" * 45,
             "",
-            "Evidence received:"
+            "Research workflow:",
+            "1. Define the research question.",
+            "2. Identify relevant concepts.",
+            "3. Identify candidate methodologies.",
+            "4. Compare evidence and assumptions.",
+            "5. Identify limitations.",
+            "6. Formulate a testable conclusion.",
+            "",
+            "Source status:",
+            "This Phase-2 configuration does not perform live web search.",
+            "External claims therefore require a connected "
+            "source-retrieval layer for verification.",
         ]
 
-        for result in useful:
-
-            first_line = (
-                result.output
-                .strip()
-                .split("\n")[0]
-            )
-
-            lines.append(
-                f"- {result.agent_name}: {first_line}"
-            )
-
-        lines.extend(
-            [
-                "",
-                "Reasoning process:",
-                "1. Identify relevant evidence.",
-                "2. Compare specialist outputs.",
-                "3. Detect contradictions or missing information.",
-                "4. Infer the most likely explanation.",
-                "5. Select the appropriate action.",
-                "6. State the conclusion."
-            ]
+        return AgentResult(
+            agent_name=self.name,
+            intent="RESEARCH",
+            success=True,
+            output="\n".join(output),
+            metadata={
+                "live_search": False
+            },
         )
-
-        return "\n".join(lines)
-
-
-# ============================================================
-# CRITIC AGENT
-# ============================================================
-
-class CriticAgent(BaseAgent):
-
-    def __init__(self):
-        super().__init__("CriticAgent")
-
-    def generate_response(
-        self,
-        query,
-        previous_results
-    ):
-
-        if not previous_results:
-
-            return """CRITIC REVIEW
-
-Status: FAILED
-
-No agent output was available."""
-
-        errors = [
-
-            result.agent_name
-
-            for result in previous_results
-
-            if result.status == "error"
-        ]
-
-        if errors:
-
-            return (
-                "CRITIC REVIEW\n\n"
-                "Status: FAILED\n\n"
-                "Agents with errors:\n"
-                + "\n".join(
-                    "- " + name
-                    for name in errors
-                )
-            )
-
-        return """CRITIC REVIEW
-
-Status: PASSED
-
-Checks:
-- Agent execution: PASSED
-- No execution errors: PASSED
-- Specialist output available: PASSED
-- Reasoning layer available: PASSED
-- Pipeline integrity: PASSED
-
-Recommendation:
-Use the reasoning output together with specialist
-evidence when producing the final response."""
 
 
 # ============================================================
@@ -1148,31 +784,665 @@ class GeneralAgent(BaseAgent):
     def __init__(self):
         super().__init__("GeneralAgent")
 
-    def generate_response(
+    def run(
         self,
-        query,
-        previous_results
-    ):
+        query: str,
+        context=None
+    ) -> AgentResult:
 
-        return (
-            "RETRO-AI received the request and processed it "
-            "through the multi-agent intelligence engine."
+        output = (
+            "GENERAL AGENT\n"
+            "=============================================\n\n"
+            f"User request received:\n{query}\n\n"
+            "No specialized domain workflow was detected."
+        )
+
+        return AgentResult(
+            agent_name=self.name,
+            intent="GENERAL",
+            success=True,
+            output=output,
+            metadata={},
         )
 
 
 # ============================================================
-# MULTI AGENT SYSTEM
+# REASONING AGENT
+# ============================================================
+
+class ReasoningAgent(BaseAgent):
+
+    def __init__(self):
+        super().__init__("ReasoningAgent")
+
+    def run(
+        self,
+        query: str,
+        context=None
+    ) -> AgentResult:
+
+        context = context or {}
+
+        intent = normalize_intent(
+            context.get("intent", "GENERAL")
+        )
+
+        results = context.get(
+            "agent_results",
+            []
+        )
+
+        findings = []
+
+        # ----------------------------------------------------
+        # MACHINE LEARNING REASONING
+        # ----------------------------------------------------
+
+        if intent == "MACHINE_LEARNING":
+
+            ml_result = next(
+                (
+                    r for r in results
+                    if r.agent_name == "MLAgent"
+                ),
+                None,
+            )
+
+            if ml_result:
+
+                q = query.lower()
+
+                if (
+                    "fraud" in q
+                    or "imbalance" in q
+                    or "imbalanced" in q
+                ):
+
+                    findings.extend([
+                        "The task is a classification-evaluation problem "
+                        "with potential class imbalance.",
+                        "Accuracy alone may hide poor detection of the "
+                        "minority fraud class.",
+                        "Precision and recall should be evaluated together "
+                        "because false positives and false negatives have "
+                        "different operational consequences.",
+                        "PR-AUC is useful when fraudulent transactions "
+                        "are rare.",
+                        "The decision threshold should be evaluated "
+                        "instead of assuming 0.5 is optimal.",
+                        "Final performance should be measured on an "
+                        "untouched test set after model and threshold selection.",
+                    ])
+
+                elif (
+                    "overfit" in q
+                    or "overfitting" in q
+                ):
+
+                    findings.extend([
+                        "The central issue is model generalization.",
+                        "Training and validation behavior should be compared "
+                        "before selecting a remedy.",
+                        "A large train-validation gap can indicate overfitting.",
+                        "Regularization, early stopping, augmentation, "
+                        "or reduced model complexity can then be evaluated.",
+                    ])
+
+                else:
+
+                    findings.extend([
+                        "The ML specialist identified a complete "
+                        "model-development workflow.",
+                        "Validation and held-out testing are required "
+                        "before interpreting model performance.",
+                    ])
+
+        # ----------------------------------------------------
+        # CODING REASONING
+        # ----------------------------------------------------
+
+        elif intent == "CODING":
+
+            coding_result = next(
+                (
+                    r for r in results
+                    if r.agent_name == "CodingAgent"
+                ),
+                None,
+            )
+
+            if coding_result:
+
+                metadata = coding_result.metadata
+
+                if metadata.get("syntax_valid"):
+
+                    findings.append(
+                        "The generated implementation passed "
+                        "Python AST syntax validation."
+                    )
+
+                else:
+
+                    findings.append(
+                        "The generated implementation failed "
+                        "Python AST syntax validation."
+                    )
+
+                functions = metadata.get(
+                    "functions",
+                    []
+                )
+
+                if functions:
+
+                    findings.append(
+                        "Detected function(s): "
+                        + ", ".join(functions)
+                        + "."
+                    )
+
+                code = metadata.get(
+                    "code",
+                    ""
+                )
+
+                if "set(" in code:
+
+                    findings.append(
+                        "A set-based structure is used for efficient "
+                        "membership or uniqueness operations."
+                    )
+
+                if "sqrt" in code:
+
+                    findings.append(
+                        "The prime-number implementation limits "
+                        "divisibility checks using the square-root bound."
+                    )
+
+                if "DictReader" in code:
+
+                    findings.append(
+                        "CSV rows are represented using column-aware "
+                        "dictionary records."
+                    )
+
+                findings.append(
+                    "Edge cases should still be tested before production use."
+                )
+
+        # ----------------------------------------------------
+        # DATA ANALYSIS REASONING
+        # ----------------------------------------------------
+
+        elif intent == "DATA_ANALYSIS":
+
+            findings.extend([
+                "The data-analysis workflow begins with structural "
+                "inspection before statistical interpretation.",
+                "Missing values, duplicates and incorrect data types "
+                "should be checked before modeling or visualization.",
+                "Actual numerical conclusions require the dataset itself.",
+            ])
+
+            if "csv" in query.lower():
+
+                findings.append(
+                    "For CSV data, parsing and column-type validation "
+                    "should occur before downstream analysis."
+                )
+
+        # ----------------------------------------------------
+        # RESEARCH REASONING
+        # ----------------------------------------------------
+
+        elif intent == "RESEARCH":
+
+            findings.extend([
+                "The workflow separates the research question, "
+                "methodology, evidence and limitations.",
+                "The current configuration does not verify live external sources.",
+                "External factual claims should therefore be checked "
+                "through a source-retrieval mechanism.",
+            ])
+
+        # ----------------------------------------------------
+        # GENERAL
+        # ----------------------------------------------------
+
+        else:
+
+            successful_agents = [
+                r.agent_name
+                for r in results
+                if r.success
+            ]
+
+            if successful_agents:
+
+                findings.append(
+                    "Successfully executed agent(s): "
+                    + ", ".join(successful_agents)
+                    + "."
+                )
+
+            findings.append(
+                "No specialized reasoning strategy was required."
+            )
+
+        output = []
+
+        output.append("REASONING AGENT")
+        output.append("=" * 45)
+
+        output.append(
+            f"\nIntent analyzed: {intent}"
+        )
+
+        output.append(
+            "\nEvidence received:"
+        )
+
+        for result in results:
+
+            output.append(
+                f"- {result.agent_name}: "
+                f"{'SUCCESS' if result.success else 'FAILED'}"
+            )
+
+        output.append(
+            "\nREASONING FINDINGS"
+        )
+
+        output.append(
+            "-" * 45
+        )
+
+        for index, finding in enumerate(
+            findings,
+            1
+        ):
+
+            output.append(
+                f"{index}. {finding}"
+            )
+
+        output.append(
+            "\nCONCLUSION"
+        )
+
+        output.append(
+            "-" * 45
+        )
+
+        if findings:
+
+            output.append(
+                "The specialist evidence was analyzed according "
+                "to the detected task type."
+            )
+
+        else:
+
+            output.append(
+                "Insufficient specialist evidence was available."
+            )
+
+        return AgentResult(
+            agent_name=self.name,
+            intent="REASONING",
+            success=bool(findings),
+            output="\n".join(output),
+            metadata={
+                "finding_count": len(findings),
+                "analyzed_intent": intent,
+            },
+        )
+
+
+# ============================================================
+# CRITIC AGENT
+# ============================================================
+
+class CriticAgent(BaseAgent):
+
+    def __init__(self):
+        super().__init__("CriticAgent")
+
+    def run(
+        self,
+        query: str,
+        context=None
+    ) -> AgentResult:
+
+        context = context or {}
+
+        results = context.get(
+            "agent_results",
+            []
+        )
+
+        reasoning = context.get(
+            "reasoning_result"
+        )
+
+        intent = normalize_intent(
+            context.get(
+                "intent",
+                "GENERAL"
+            )
+        )
+
+        checks = []
+
+        # ----------------------------------------------------
+        # EXPECTED SPECIALIST
+        # ----------------------------------------------------
+
+        expected_agents = {
+            "MACHINE_LEARNING": "MLAgent",
+            "CODING": "CodingAgent",
+            "DATA_ANALYSIS": "DataAnalysisAgent",
+            "RESEARCH": "ResearchAgent",
+            "GENERAL": "GeneralAgent",
+        }
+
+        expected_agent = expected_agents.get(
+            intent,
+            "GeneralAgent"
+        )
+
+        executed_agents = [
+            r.agent_name
+            for r in results
+        ]
+
+        if expected_agent in executed_agents:
+
+            checks.append(
+                (
+                    True,
+                    f"Intent '{intent}' correctly routed "
+                    f"to {expected_agent}."
+                )
+            )
+
+        else:
+
+            checks.append(
+                (
+                    False,
+                    f"Intent '{intent}' expected "
+                    f"{expected_agent}, but executed: "
+                    + (
+                        ", ".join(executed_agents)
+                        if executed_agents
+                        else "none"
+                    )
+                )
+            )
+
+        # ----------------------------------------------------
+        # SPECIALIST EXECUTION
+        # ----------------------------------------------------
+
+        if results:
+
+            checks.append(
+                (
+                    True,
+                    "At least one specialist agent executed."
+                )
+            )
+
+        else:
+
+            checks.append(
+                (
+                    False,
+                    "No specialist agent executed."
+                )
+            )
+
+        # ----------------------------------------------------
+        # FAILED AGENTS
+        # ----------------------------------------------------
+
+        failed_agents = [
+            r.agent_name
+            for r in results
+            if not r.success
+        ]
+
+        if not failed_agents:
+
+            checks.append(
+                (
+                    True,
+                    "No specialist agent reported execution failure."
+                )
+            )
+
+        else:
+
+            checks.append(
+                (
+                    False,
+                    "Failed agent(s): "
+                    + ", ".join(failed_agents)
+                )
+            )
+
+        # ----------------------------------------------------
+        # OUTPUT EXISTENCE
+        # ----------------------------------------------------
+
+        if any(
+            r.output.strip()
+            for r in results
+        ):
+
+            checks.append(
+                (
+                    True,
+                    "Specialist agents produced usable evidence."
+                )
+            )
+
+        else:
+
+            checks.append(
+                (
+                    False,
+                    "Specialist agents produced empty output."
+                )
+            )
+
+        # ----------------------------------------------------
+        # REASONING
+        # ----------------------------------------------------
+
+        if reasoning and reasoning.success:
+
+            checks.append(
+                (
+                    True,
+                    "Reasoning layer produced task-specific findings."
+                )
+            )
+
+        else:
+
+            checks.append(
+                (
+                    False,
+                    "Reasoning layer did not produce usable findings."
+                )
+            )
+
+        # ----------------------------------------------------
+        # CODING VALIDATION
+        # ----------------------------------------------------
+
+        for result in results:
+
+            if result.agent_name == "CodingAgent":
+
+                if result.metadata.get(
+                    "syntax_valid",
+                    False
+                ):
+
+                    checks.append(
+                        (
+                            True,
+                            "Generated Python code passed AST validation."
+                        )
+                    )
+
+                else:
+
+                    checks.append(
+                        (
+                            False,
+                            "Generated Python code failed AST validation."
+                        )
+                    )
+
+        # ----------------------------------------------------
+        # REASONING QUALITY
+        # ----------------------------------------------------
+
+        if reasoning:
+
+            reasoning_text = reasoning.output.lower()
+
+            generic_markers = [
+                "identify relevant evidence.",
+                "compare specialist outputs.",
+                "detect contradictions or missing information.",
+                "infer the most likely explanation.",
+                "appropriate next action.",
+            ]
+
+            generic_count = sum(
+                marker in reasoning_text
+                for marker in generic_markers
+            )
+
+            if generic_count >= 3:
+
+                checks.append(
+                    (
+                        False,
+                        "Reasoning output is overly generic."
+                    )
+                )
+
+            else:
+
+                checks.append(
+                    (
+                        True,
+                        "Reasoning output contains "
+                        "task-specific analysis."
+                    )
+                )
+
+        # ----------------------------------------------------
+        # FINAL STATUS
+        # ----------------------------------------------------
+
+        passed = sum(
+            1
+            for status, _ in checks
+            if status
+        )
+
+        total = len(checks)
+
+        overall_success = (
+            total > 0
+            and passed == total
+        )
+
+        output = []
+
+        output.append("CRITIC AGENT")
+        output.append("=" * 45)
+
+        output.append(
+            f"\nChecks passed: {passed}/{total}"
+        )
+
+        output.append(
+            "\nVALIDATION RESULTS"
+        )
+
+        output.append(
+            "-" * 45
+        )
+
+        for index, (
+            status,
+            message
+        ) in enumerate(
+            checks,
+            1
+        ):
+
+            output.append(
+                f"{index}. "
+                f"{'PASS' if status else 'FAIL'} - "
+                f"{message}"
+            )
+
+        output.append(
+            "\nFINAL STATUS"
+        )
+
+        output.append(
+            "-" * 45
+        )
+
+        output.append(
+            "PASSED"
+            if overall_success
+            else
+            "NEEDS REVIEW"
+        )
+
+        return AgentResult(
+            agent_name=self.name,
+            intent="CRITIC",
+            success=overall_success,
+            output="\n".join(output),
+            metadata={
+                "passed": passed,
+                "total": total,
+                "checks": checks,
+            },
+        )
+
+
+# ============================================================
+# MULTI-AGENT SYSTEM
 # ============================================================
 
 class MultiAgentSystem:
 
     def __init__(self):
 
-        print()
-        print("=" * 70)
-        print("RETRO-AI PHASE 2")
-        print("MULTI-AGENT INTELLIGENCE ENGINE")
-        print("=" * 70)
+        self.agents = {
+            "MLAgent": MLAgent(),
+            "CodingAgent": CodingAgent(),
+            "DataAnalysisAgent": DataAnalysisAgent(),
+            "ResearchAgent": ResearchAgent(),
+            "ReasoningAgent": ReasoningAgent(),
+            "CriticAgent": CriticAgent(),
+            "GeneralAgent": GeneralAgent(),
+        }
 
         self.brain = None
 
@@ -1180,523 +1450,743 @@ class MultiAgentSystem:
 
             try:
                 self.brain = IntelligenceBrain()
-                print("BRAIN: READY")
 
-            except Exception as error:
+            except Exception:
 
-                print("BRAIN: FALLBACK")
-                print("Brain error:", error)
-
-        else:
-
-            print("BRAIN: FALLBACK")
-
-        self.agents = {
-
-            "MLAgent":
-                MLAgent(),
-
-            "CodingAgent":
-                CodingAgent(),
-
-            "DataAnalysisAgent":
-                DataAnalysisAgent(),
-
-            "ResearchAgent":
-                ResearchAgent(),
-
-            "ReasoningAgent":
-                ReasoningAgent(),
-
-            "CriticAgent":
-                CriticAgent(),
-
-            "GeneralAgent":
-                GeneralAgent()
-        }
-
-        print("AGENTS: READY")
-        print("=" * 70)
+                self.brain = None
 
     # ========================================================
-    # FALLBACK INTENT
+    # INTENT DETECTION
     # ========================================================
 
-    def detect_intent(self, query):
+    def detect_intent(
+        self,
+        query: str
+    ) -> str:
 
-        q = query.lower()
+        q = query.lower().strip()
 
+        # ----------------------------------------------------
+        # MACHINE LEARNING
+        # ----------------------------------------------------
+
+        ml_keywords = [
+
+            "machine learning",
+            "machine-learning",
+
+            "deep learning",
+
+            "neural network",
+            "neural networks",
+
+            "cnn",
+            "rnn",
+            "lstm",
+            "transformer",
+
+            "classification",
+            "classifier",
+
+            "regression",
+
+            "model evaluation",
+            "evaluate model",
+            "evaluate a model",
+            "model performance",
+
+            "overfit",
+            "overfitting",
+
+            "fraud",
+            "fraud detection",
+            "fraud detection model",
+
+            "anomaly detection",
+
+            "imbalance",
+            "imbalanced",
+            "class imbalance",
+            "imbalanced dataset",
+
+            "roc",
+            "roc-auc",
+            "auc",
+            "pr-auc",
+
+            "precision",
+            "recall",
+            "f1",
+            "f1-score",
+
+            "accuracy",
+            "confusion matrix",
+
+            "train model",
+            "training model",
+            "trained model",
+            "predictive model",
+        ]
+
+        # ----------------------------------------------------
+        # DATA ANALYSIS
+        # ----------------------------------------------------
+
+        data_keywords = [
+
+            "data analysis",
+            "analyze data",
+            "analyse data",
+
+            "csv dataset",
+            "csv file",
+
+            "dataframe",
+            "pandas",
+
+            "missing values",
+            "outliers",
+            "correlation",
+
+            "exploratory data analysis",
+            "eda",
+        ]
+
+        # ----------------------------------------------------
+        # RESEARCH
+        # ----------------------------------------------------
+
+        research_keywords = [
+
+            "research paper",
+            "research workflow",
+            "research",
+
+            "literature review",
+            "methodology",
+
+            "academic paper",
+            "academic",
+
+            "research study",
+        ]
+
+        # ----------------------------------------------------
+        # CODING
+        # ----------------------------------------------------
+
+        coding_keywords = [
+
+            "write code",
+            "python code",
+            "code for",
+
+            "program",
+            "programming",
+
+            "function",
+            "algorithm",
+            "implement",
+
+            "debug",
+            "script",
+
+            "prime number",
+            "palindrome",
+            "factorial",
+            "fibonacci",
+
+            "duplicate",
+            "second largest",
+        ]
+
+        # ML first.
         if any(
-            word in q
-            for word in [
-                "code",
-                "python",
-                "javascript",
-                "java",
-                "debug",
-                "bug",
-                "program",
-                "implement",
-                "algorithm",
-                "prime",
-                "duplicate",
-                "factorial",
-                "fibonacci",
-                "palindrome"
-            ]
-        ):
-
-            return "CODING"
-
-        if any(
-            word in q
-            for word in [
-                "machine learning",
-                "neural network",
-                "classification",
-                "regression",
-                "ml model",
-                "model accuracy",
-                "overfitting",
-                "underfitting",
-                "fraud detection"
-            ]
+            keyword in q
+            for keyword in ml_keywords
         ):
 
             return "MACHINE_LEARNING"
 
         if any(
-            word in q
-            for word in [
-                "dataset",
-                "csv",
-                "data analysis",
-                "analyze data"
-            ]
+            keyword in q
+            for keyword in data_keywords
         ):
 
             return "DATA_ANALYSIS"
 
         if any(
-            word in q
-            for word in [
-                "research",
-                "latest developments",
-                "research latest"
-            ]
+            keyword in q
+            for keyword in research_keywords
         ):
 
             return "RESEARCH"
 
         if any(
-            word in q
-            for word in [
-                "why",
-                "reason",
-                "logic",
-                "analyze"
-            ]
+            keyword in q
+            for keyword in coding_keywords
         ):
 
-            return "REASONING"
+            return "CODING"
 
         return "GENERAL"
 
     # ========================================================
-    # ROUTE
+    # BRAIN ROUTING
     # ========================================================
 
-    def route_agents(
+    def brain_route(
         self,
-        query,
-        intent
-    ):
+        query: str
+    ) -> Tuple[str, List[str]]:
 
-        if intent == "MACHINE_LEARNING":
-
-            return [
-                "MLAgent",
-                "ReasoningAgent"
-            ]
-
-        if intent == "CODING":
-
-            return [
-                "CodingAgent",
-                "ReasoningAgent"
-            ]
-
-        if intent == "DATA_ANALYSIS":
-
-            return [
-                "DataAnalysisAgent",
-                "ReasoningAgent"
-            ]
-
-        if intent == "RESEARCH":
-
-            return [
-                "ResearchAgent",
-                "ReasoningAgent"
-            ]
-
-        if intent == "REASONING":
-
-            return [
-                "ReasoningAgent"
-            ]
-
-        return [
-            "GeneralAgent"
-        ]
-
-    # ========================================================
-    # FIND RESULT
-    # ========================================================
-
-    def find_result(
-        self,
-        results,
-        agent_name
-    ):
-
-        for result in results:
-
-            if result.agent_name == agent_name:
-                return result
-
-        return None
-
-    # ========================================================
-    # FINAL RESPONSE
-    # ========================================================
-
-    def build_final_response(
-        self,
-        intent,
-        results
-    ):
-
-        successful = [
-
-            result
-
-            for result in results
-
-            if (
-                result.status == "success"
-                and result.agent_name
-                != "CriticAgent"
-            )
-        ]
-
-        if not successful:
-
-            return (
-                "RETRO-AI could not generate a valid response."
-            )
-
-        parts = []
-
-        for result in successful:
-
-            if result.agent_name in [
-                "MLAgent",
-                "CodingAgent",
-                "DataAnalysisAgent",
-                "ResearchAgent",
-                "ReasoningAgent"
-            ]:
-
-                parts.append(
-                    result.output
-                )
-
-        if parts:
-
-            return (
-                "\n\n"
-                + (
-                    "\n\n"
-                    + "=" * 60
-                    + "\n\n"
-                ).join(parts)
-            )
-
-        return successful[0].output
-
-    # ========================================================
-    # EXECUTE
-    # ========================================================
-
-    def execute(self, query):
-
-        if not isinstance(query, str):
-
-            raise TypeError(
-                "Query must be a string."
-            )
-
-        query = query.strip()
-
-        if not query:
-
-            return {
-                "query": "",
-                "intent": "GENERAL",
-                "agents": [],
-                "results": [],
-                "final_response":
-                    "Please enter a valid query."
-            }
-
-        print()
-        print("=" * 70)
-        print("RETRO-AI MULTI-AGENT ENGINE")
-        print("=" * 70)
-
-        print()
-        print("QUERY:")
-        print(query)
-
-        intent = None
-        selected_agents = None
-
-        # ----------------------------------------------------
-        # BRAIN
-        # ----------------------------------------------------
-
-        if self.brain is not None:
-
-            try:
-
-                decision = self.brain.think(
-                    query
-                )
-
-                intent = str(
-                    decision.understanding.intent
-                )
-
-                selected_agents = list(
-                    decision.recommended_agents
-                )
-
-            except Exception as error:
-
-                print(
-                    "Brain fallback:",
-                    error
-                )
-
-        # ----------------------------------------------------
-        # FALLBACK
-        # ----------------------------------------------------
-
-        if not intent:
-
-            intent = self.detect_intent(
-                query
-            )
-
-        if not selected_agents:
-
-            selected_agents = self.route_agents(
-                query,
-                intent
-            )
-
-        # ----------------------------------------------------
-        # VALID AGENTS
-        # ----------------------------------------------------
-
-        selected_agents = [
-
-            name
-
-            for name in selected_agents
-
-            if name in self.agents
-        ]
-
-        if not selected_agents:
-
-            selected_agents = [
-                "GeneralAgent"
-            ]
-
-        # ----------------------------------------------------
-        # ALWAYS ADD REASONING AFTER SPECIALIST
-        # ----------------------------------------------------
-
-        specialist_exists = any(
-            name not in [
-                "ReasoningAgent",
-                "CriticAgent"
-            ]
-            for name in selected_agents
+        fallback_intent = self.detect_intent(
+            query
         )
 
-        if (
-            specialist_exists
-            and "ReasoningAgent"
-            not in selected_agents
-        ):
+        if self.brain is None:
 
-            selected_agents.append(
+            return (
+                fallback_intent,
+                []
+            )
+
+        try:
+
+            result = None
+
+            methods = [
+                "analyze",
+                "route",
+                "process",
+                "get_intent",
+            ]
+
+            for method_name in methods:
+
+                method = getattr(
+                    self.brain,
+                    method_name,
+                    None
+                )
+
+                if callable(method):
+
+                    try:
+
+                        result = method(
+                            query
+                        )
+
+                        break
+
+                    except Exception:
+
+                        continue
+
+            if result is None:
+
+                return (
+                    fallback_intent,
+                    []
+                )
+
+            # ------------------------------------------------
+            # DICTIONARY
+            # ------------------------------------------------
+
+            if isinstance(
+                result,
+                dict
+            ):
+
+                intent = result.get(
+                    "intent",
+                    result.get(
+                        "task_type",
+                        fallback_intent
+                    )
+                )
+
+                agents = result.get(
+                    "agents",
+                    result.get(
+                        "selected_agents",
+                        result.get(
+                            "recommended_agents",
+                            []
+                        )
+                    )
+                )
+
+                if isinstance(
+                    agents,
+                    str
+                ):
+
+                    agents = [
+                        agents
+                    ]
+
+                return (
+                    normalize_intent(
+                        intent
+                    ),
+                    [
+                        normalize_agent_name(
+                            agent
+                        )
+                        for agent in agents
+                    ]
+                )
+
+            # ------------------------------------------------
+            # STRING
+            # ------------------------------------------------
+
+            if isinstance(
+                result,
+                str
+            ):
+
+                text = result.lower()
+
+                if (
+                    "fraud" in query.lower()
+                    or "machine learning" in text
+                    or (
+                        "machine" in text
+                        and "learning" in text
+                    )
+                ):
+
+                    return (
+                        "MACHINE_LEARNING",
+                        []
+                    )
+
+                if "data analysis" in text:
+
+                    return (
+                        "DATA_ANALYSIS",
+                        []
+                    )
+
+                if "research" in text:
+
+                    return (
+                        "RESEARCH",
+                        []
+                    )
+
+                if "coding" in text:
+
+                    return (
+                        "CODING",
+                        []
+                    )
+
+        except Exception:
+            pass
+
+        return (
+            fallback_intent,
+            []
+        )
+
+    # ========================================================
+    # AGENT SELECTION
+    # ========================================================
+
+    def select_agents(
+        self,
+        intent: str,
+        brain_agents: Optional[List[str]] = None
+    ) -> List[str]:
+
+        intent = normalize_intent(
+            intent
+        )
+
+        selected = []
+
+        if brain_agents:
+
+            for name in brain_agents:
+
+                normalized = normalize_agent_name(
+                    name
+                )
+
+                if normalized in self.agents:
+
+                    selected.append(
+                        normalized
+                    )
+
+        mapping = {
+            "MACHINE_LEARNING": "MLAgent",
+            "CODING": "CodingAgent",
+            "DATA_ANALYSIS": "DataAnalysisAgent",
+            "RESEARCH": "ResearchAgent",
+            "GENERAL": "GeneralAgent",
+        }
+
+        specialist = mapping.get(
+            intent,
+            "GeneralAgent"
+        )
+
+        if specialist not in selected:
+
+            selected.insert(
+                0,
+                specialist
+            )
+
+        if "ReasoningAgent" not in selected:
+
+            selected.append(
                 "ReasoningAgent"
             )
 
-        print()
-        print("INTENT:")
-        print(intent)
+        final_agents = []
 
-        print()
-        print("SELECTED AGENTS:")
+        for agent in selected:
 
-        for name in selected_agents:
+            if agent not in final_agents:
 
-            print(
-                " ->",
-                name
-            )
+                final_agents.append(
+                    agent
+                )
 
-        # ----------------------------------------------------
-        # EXECUTE
-        # ----------------------------------------------------
+        return final_agents
+
+    # ========================================================
+    # EXECUTE SPECIALISTS
+    # ========================================================
+
+    def execute_specialists(
+        self,
+        query: str,
+        selected_agents: List[str],
+        intent: str
+    ) -> List[AgentResult]:
 
         results = []
 
-        print()
-        print(
-            "AGENT EXECUTION"
-        )
+        for agent_name in selected_agents:
 
-        print(
-            "-" * 70
-        )
-
-        for name in selected_agents:
+            if agent_name in (
+                "ReasoningAgent",
+                "CriticAgent"
+            ):
+                continue
 
             agent = self.agents.get(
-                name
+                agent_name
             )
 
             if agent is None:
                 continue
 
-            result = agent.execute(
-                query,
-                results
-            )
+            try:
+
+                result = agent.run(
+                    query,
+                    {
+                        "intent": intent
+                    }
+                )
+
+            except Exception as exc:
+
+                result = AgentResult(
+                    agent_name=agent_name,
+                    intent=intent,
+                    success=False,
+                    output=(
+                        f"Agent execution error: {exc}"
+                    ),
+                    metadata={
+                        "error": str(exc)
+                    },
+                )
 
             results.append(
                 result
             )
 
-            print()
-            print(
-                f"[{result.agent_name}]"
+        return results
+
+    # ========================================================
+    # FINAL RESPONSE
+    # ========================================================
+
+    def synthesize_final_response(
+        self,
+        query: str,
+        intent: str,
+        specialists: List[AgentResult],
+        reasoning: AgentResult,
+        critic: AgentResult
+    ) -> str:
+
+        output = []
+
+        output.append(
+            "RETRO-AI FINAL RESPONSE"
+        )
+
+        output.append(
+            "=" * 60
+        )
+
+        output.append(
+            f"\nDetected intent: {intent}"
+        )
+
+        output.append(
+            "\nSPECIALIST FINDINGS"
+        )
+
+        output.append(
+            "-" * 60
+        )
+
+        for result in specialists:
+
+            output.append(
+                f"\n[{result.agent_name}]"
             )
 
-            print(
-                "STATUS:",
-                result.status
-            )
-
-            print(
+            output.append(
                 result.output
             )
 
-            print(
-                "TIME:",
-                result.execution_time_ms,
-                "ms"
+        output.append(
+            "\nREASONING"
+        )
+
+        output.append(
+            "-" * 60
+        )
+
+        output.append(
+            reasoning.output
+        )
+
+        output.append(
+            "\nCRITIC VALIDATION"
+        )
+
+        output.append(
+            "-" * 60
+        )
+
+        status = (
+            "PASSED"
+            if critic.success
+            else
+            "NEEDS REVIEW"
+        )
+
+        output.append(
+            f"System validation: {status}"
+        )
+
+        output.append(
+            f"Validation checks: "
+            f"{critic.metadata.get('passed', 0)}/"
+            f"{critic.metadata.get('total', 0)}"
+        )
+
+        output.append(
+            "\nSYSTEM PIPELINE"
+        )
+
+        output.append(
+            "-" * 60
+        )
+
+        output.append(
+            "Query → Brain → Intent Router → "
+            "Specialist → Reasoning → Critic → Final Response"
+        )
+
+        return "\n".join(
+            output
+        )
+
+    # ========================================================
+    # MAIN PROCESS
+    # ========================================================
+
+    def process(
+        self,
+        query: str
+    ) -> Dict[str, Any]:
+
+        start = time.perf_counter()
+
+        # ----------------------------------------------------
+        # ROUTING
+        # ----------------------------------------------------
+
+        intent, brain_agents = self.brain_route(
+            query
+        )
+
+        intent = normalize_intent(
+            intent
+        )
+
+        # ----------------------------------------------------
+        # SAFETY OVERRIDE
+        # ----------------------------------------------------
+        # Certain explicit domain terms should never fall
+        # through to GENERAL because the Brain returned
+        # an incomplete/incorrect classification.
+
+        fallback_intent = self.detect_intent(
+            query
+        )
+
+        if fallback_intent != "GENERAL":
+
+            intent = fallback_intent
+
+        # ----------------------------------------------------
+        # AGENT SELECTION
+        # ----------------------------------------------------
+
+        selected_agents = self.select_agents(
+            intent,
+            brain_agents
+        )
+
+        # ----------------------------------------------------
+        # SPECIALISTS
+        # ----------------------------------------------------
+
+        specialist_results = (
+            self.execute_specialists(
+                query,
+                selected_agents,
+                intent
             )
+        )
+
+        # ----------------------------------------------------
+        # REASONING
+        # ----------------------------------------------------
+
+        reasoning_agent = self.agents[
+            "ReasoningAgent"
+        ]
+
+        reasoning_result = reasoning_agent.run(
+            query,
+            {
+                "intent": intent,
+                "agent_results": specialist_results,
+            }
+        )
 
         # ----------------------------------------------------
         # CRITIC
         # ----------------------------------------------------
 
-        critic = self.agents[
+        critic_agent = self.agents[
             "CriticAgent"
         ]
 
-        critic_result = critic.execute(
+        critic_result = critic_agent.run(
             query,
-            results
-        )
-
-        results.append(
-            critic_result
-        )
-
-        print()
-        print(
-            "-" * 70
-        )
-
-        print(
-            critic_result.output
+            {
+                "intent": intent,
+                "agent_results": specialist_results,
+                "reasoning_result": reasoning_result,
+            }
         )
 
         # ----------------------------------------------------
         # FINAL
         # ----------------------------------------------------
 
-        final_response = self.build_final_response(
-            intent,
-            results
+        final_response = (
+            self.synthesize_final_response(
+                query,
+                intent,
+                specialist_results,
+                reasoning_result,
+                critic_result
+            )
         )
 
-        print()
-        print(
-            "-" * 70
-        )
-
-        print(
-            "FINAL RESPONSE"
-        )
-
-        print(
-            "-" * 70
-        )
-
-        print()
-        print(
-            final_response
-        )
-
-        print()
-        print(
-            "=" * 70
-        )
-
-        print(
-            "MULTI-AGENT PIPELINE COMPLETE"
-        )
-
-        print(
-            "=" * 70
-        )
+        elapsed = (
+            time.perf_counter() - start
+        ) * 1000
 
         return {
+            "query": query,
+            "intent": intent,
 
-            "query":
-                query,
-
-            "intent":
-                intent,
-
-            "agents":
+            "selected_agents":
                 selected_agents,
 
-            "results":
-                results,
+            "specialist_results": [
+                {
+                    "agent": r.agent_name,
+                    "intent": r.intent,
+                    "success": r.success,
+                    "output": r.output,
+                    "metadata": r.metadata,
+                }
+                for r in specialist_results
+            ],
+
+            "reasoning": {
+                "agent":
+                    reasoning_result.agent_name,
+                "success":
+                    reasoning_result.success,
+                "output":
+                    reasoning_result.output,
+                "metadata":
+                    reasoning_result.metadata,
+            },
+
+            "critic": {
+                "agent":
+                    critic_result.agent_name,
+                "success":
+                    critic_result.success,
+                "output":
+                    critic_result.output,
+                "metadata":
+                    critic_result.metadata,
+            },
 
             "final_response":
-                final_response
+                final_response,
+
+            "execution_time_ms":
+                round(elapsed, 2),
         }
+
+    # ========================================================
+    # SIMPLE RUN
+    # ========================================================
+
+    def run(
+        self,
+        query: str
+    ) -> str:
+
+        return self.process(
+            query
+        )["final_response"]
 
 
 # ============================================================
@@ -1705,43 +2195,40 @@ class MultiAgentSystem:
 
 def run_tests():
 
+    print()
+    print("=" * 70)
+    print("RETRO-AI PHASE 2 TEST SUITE")
+    print("=" * 70)
+
     system = MultiAgentSystem()
 
     test_queries = [
 
-        "Explain machine learning.",
-
-        "How can I improve my ML model accuracy?",
-
-        (
-            "A model has 99% training accuracy but only "
-            "70% validation accuracy. Explain what is "
-            "happening and provide a solution."
-        ),
-
-        (
-            "A fraud detection model has 99.5% accuracy "
-            "but detects only 20% of actual fraud cases. "
-            "Is the model good?"
-        ),
-
         "Write Python code to check whether a number is prime.",
 
-        "Write Python code to find duplicate elements in a list.",
+        "Write Python code to find duplicates in a list.",
 
-        (
-            "Write Python code to find the second largest "
-            "number in a list without using sort."
-        ),
+        "Write Python code to find the second largest number.",
 
         "Write Python code for factorial.",
 
         "Write Python code for Fibonacci.",
 
-        "Write Python code to check whether a string is palindrome.",
+        "Write Python code to check a palindrome.",
 
-        "Write Python code to analyze a CSV dataset."
+        "Write Python code to read a CSV file.",
+
+        "How can I reduce overfitting in a neural network?",
+
+        "How should I evaluate a fraud detection model?",
+
+        "How should I analyze a CSV dataset?",
+
+        "Explain a research workflow for an AI project.",
     ]
+
+    passed = 0
+    failed = 0
 
     for index, query in enumerate(
         test_queries,
@@ -1749,33 +2236,115 @@ def run_tests():
     ):
 
         print()
-        print()
-        print("#" * 70)
+        print("-" * 70)
+
         print(
-            f"TEST {index}"
+            f"TEST {index}/{len(test_queries)}"
         )
-        print("#" * 70)
+
+        print(
+            "-" * 70
+        )
+
+        print(
+            f"QUERY: {query}"
+        )
 
         try:
 
-            system.execute(
+            result = system.process(
                 query
             )
 
-        except Exception as error:
-
-            print()
             print(
-                "TEST ERROR:",
-                error
+                f"\nINTENT: "
+                f"{result['intent']}"
             )
+
+            print(
+                "SELECTED AGENTS: "
+                + ", ".join(
+                    result[
+                        "selected_agents"
+                    ]
+                )
+            )
+
+            print(
+                "\nFINAL RESPONSE:"
+            )
+
+            print(
+                result[
+                    "final_response"
+                ]
+            )
+
+            critic_success = result[
+                "critic"
+            ][
+                "success"
+            ]
+
+            if critic_success:
+
+                passed += 1
+
+                print(
+                    "\nTEST STATUS: PASSED"
+                )
+
+            else:
+
+                failed += 1
+
+                print(
+                    "\nTEST STATUS: FAILED"
+                )
+
+            print(
+                f"\nExecution time: "
+                f"{result['execution_time_ms']} ms"
+            )
+
+        except Exception as exc:
+
+            failed += 1
+
+            print(
+                "\nTEST STATUS: FAILED"
+            )
+
+            print(
+                f"ERROR: {exc}"
+            )
+
+    print()
+    print("=" * 70)
+    print("TEST SUMMARY")
+    print("=" * 70)
+
+    print(
+        f"Passed: {passed}"
+    )
+
+    print(
+        f"Failed: {failed}"
+    )
+
+    print(
+        f"Total: {len(test_queries)}"
+    )
+
+    print(
+        "=" * 70
+    )
 
 
 # ============================================================
-# MAIN
+# RUN
 # ============================================================
 
 if __name__ == "__main__":
 
     run_tests()
-    
