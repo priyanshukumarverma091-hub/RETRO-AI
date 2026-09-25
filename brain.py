@@ -22,6 +22,37 @@ class Intent(Enum):
 
 
 # ============================================================
+# MODES
+# ============================================================
+
+VALID_MODES = {
+    "general",
+    "research",
+    "coding",
+}
+
+
+def normalize_mode(mode: str) -> str:
+    """
+    Normalize user-selected RETRO-AI mode.
+
+    Supported:
+        general
+        research
+        coding
+
+    Invalid values fall back to general.
+    """
+
+    value = str(mode or "general").strip().lower()
+
+    if value not in VALID_MODES:
+        return "general"
+
+    return value
+
+
+# ============================================================
 # QUERY UNDERSTANDING
 # ============================================================
 
@@ -29,6 +60,9 @@ class Intent(Enum):
 class QueryUnderstanding:
 
     original_query: str
+
+    # Selected UI / system mode
+    mode: str = "general"
 
     intent: str = Intent.GENERAL.value
 
@@ -136,7 +170,6 @@ class IntelligenceBrain:
                 "statistical analysis",
                 "missing values",
                 "outliers",
-                "duplicates",
                 "correlation",
                 "distribution",
                 "data cleaning",
@@ -427,11 +460,22 @@ class IntelligenceBrain:
     # MAIN THINK
     # ========================================================
 
-    def think(self, query: str) -> BrainDecision:
+    def think(
+        self,
+        query: str,
+        mode: str = "general"
+    ) -> BrainDecision:
 
-        understanding = self.understand(query)
+        mode = normalize_mode(mode)
 
-        agents = self.select_agents(understanding)
+        understanding = self.understand(
+            query,
+            mode=mode
+        )
+
+        agents = self.select_agents(
+            understanding
+        )
 
         reasoning = self.generate_reasoning(
             understanding,
@@ -454,23 +498,90 @@ class IntelligenceBrain:
     # UNDERSTANDING
     # ========================================================
 
-    def understand(self, query: str) -> QueryUnderstanding:
+    def understand(
+        self,
+        query: str,
+        mode: str = "general"
+    ) -> QueryUnderstanding:
+
+        mode = normalize_mode(mode)
 
         query = query.strip()
 
         normalized = query.lower()
 
-        intent = self.detect_intent(normalized)
+        intent = self.detect_intent(
+            normalized
+        )
 
-        goal = self.extract_goal(query)
+        # ----------------------------------------------------
+        # MODE-AWARE INTENT
+        # ----------------------------------------------------
 
-        entities = self.extract_entities(normalized)
+        # Explicit user mode has priority when the selected
+        # mode is research or coding.
 
-        requirements = self.extract_requirements(normalized)
+        if mode == "research":
+            intent = Intent.RESEARCH.value
 
-        capabilities = self.detect_capabilities(normalized)
+        elif mode == "coding":
+            intent = Intent.CODING.value
 
-        constraints = self.extract_constraints(normalized)
+        goal = self.extract_goal(
+            query
+        )
+
+        entities = self.extract_entities(
+            normalized
+        )
+
+        requirements = self.extract_requirements(
+            normalized
+        )
+
+        capabilities = self.detect_capabilities(
+            normalized
+        )
+
+        constraints = self.extract_constraints(
+            normalized
+        )
+
+        # ----------------------------------------------------
+        # MODE CAPABILITIES
+        # ----------------------------------------------------
+
+        if mode == "research":
+
+            if Intent.RESEARCH.value not in capabilities:
+                capabilities.append(
+                    Intent.RESEARCH.value
+                )
+
+            if "research" not in requirements:
+                requirements.append(
+                    "research"
+                )
+
+        elif mode == "coding":
+
+            if Intent.CODING.value not in capabilities:
+                capabilities.append(
+                    Intent.CODING.value
+                )
+
+            if "implementation" not in requirements:
+                requirements.append(
+                    "implementation"
+                )
+
+        capabilities = list(
+            dict.fromkeys(capabilities)
+        )
+
+        requirements = list(
+            dict.fromkeys(requirements)
+        )
 
         complexity = self.calculate_complexity(
             normalized,
@@ -482,8 +593,14 @@ class IntelligenceBrain:
             normalized
         )
 
+        # Research mode normally requires external information.
+        if mode == "research":
+            needs_tools = True
+
         domain_capabilities = [
+
             c for c in capabilities
+
             if c in {
                 Intent.MACHINE_LEARNING.value,
                 Intent.DATA_ANALYSIS.value,
@@ -493,14 +610,23 @@ class IntelligenceBrain:
         ]
 
         needs_multiple_agents = (
+
             len(domain_capabilities) >= 2
+
             or len(requirements) >= 2
+
             or complexity >= 0.60
         )
+
+        # Mode-specific processing can require multiple stages.
+        if mode in {"research", "coding"}:
+            needs_multiple_agents = True
 
         return QueryUnderstanding(
 
             original_query=query,
+
+            mode=mode,
 
             intent=intent,
 
@@ -525,7 +651,10 @@ class IntelligenceBrain:
     # INTENT DETECTION
     # ========================================================
 
-    def detect_intent(self, query: str) -> str:
+    def detect_intent(
+        self,
+        query: str
+    ) -> str:
 
         query = query.lower().strip()
 
@@ -657,17 +786,16 @@ class IntelligenceBrain:
         ):
             return Intent.REASONING.value
 
-        # ----------------------------------------------------
-        # GENERAL
-        # ----------------------------------------------------
-
         return Intent.GENERAL.value
 
     # ========================================================
     # SIGNAL WEIGHT
     # ========================================================
 
-    def signal_weight(self, signal: str) -> float:
+    def signal_weight(
+        self,
+        signal: str
+    ) -> float:
 
         strong_signals = {
 
@@ -708,7 +836,10 @@ class IntelligenceBrain:
     # GOAL
     # ========================================================
 
-    def extract_goal(self, query: str) -> str:
+    def extract_goal(
+        self,
+        query: str
+    ) -> str:
 
         patterns = [
 
@@ -798,7 +929,7 @@ class IntelligenceBrain:
         capabilities = []
 
         # ----------------------------------------------------
-        # ML CAPABILITY
+        # ML
         # ----------------------------------------------------
 
         ml_patterns = [
@@ -834,7 +965,7 @@ class IntelligenceBrain:
             )
 
         # ----------------------------------------------------
-        # DATA CAPABILITY
+        # DATA
         # ----------------------------------------------------
 
         data_patterns = [
@@ -865,7 +996,7 @@ class IntelligenceBrain:
             )
 
         # ----------------------------------------------------
-        # CODING CAPABILITY
+        # CODING
         # ----------------------------------------------------
 
         coding_patterns = [
@@ -896,7 +1027,7 @@ class IntelligenceBrain:
             )
 
         # ----------------------------------------------------
-        # RESEARCH CAPABILITY
+        # RESEARCH
         # ----------------------------------------------------
 
         research_patterns = [
@@ -922,7 +1053,7 @@ class IntelligenceBrain:
             )
 
         # ----------------------------------------------------
-        # REASONING CAPABILITY
+        # REASONING
         # ----------------------------------------------------
 
         reasoning_patterns = [
@@ -1000,11 +1131,9 @@ class IntelligenceBrain:
         complexity = 0.20
 
         if len(query) > 100:
-
             complexity += 0.10
 
         if len(query) > 200:
-
             complexity += 0.10
 
         complexity += min(
@@ -1101,6 +1230,33 @@ class IntelligenceBrain:
 
         intent = understanding.intent
 
+        mode = normalize_mode(
+            understanding.mode
+        )
+
+        # ----------------------------------------------------
+        # MODE PRIORITY
+        # ----------------------------------------------------
+
+        # Mode does NOT completely replace dynamic routing.
+        # It only establishes the primary specialist.
+
+        if mode == "coding":
+
+            agents.append(
+                "CodingAgent"
+            )
+
+        elif mode == "research":
+
+            agents.append(
+                "ResearchAgent"
+            )
+
+        # ----------------------------------------------------
+        # PRIMARY AGENT FROM INTENT
+        # ----------------------------------------------------
+
         primary_agents = {
 
             Intent.MACHINE_LEARNING.value:
@@ -1119,15 +1275,17 @@ class IntelligenceBrain:
                 "ReasoningAgent"
         }
 
-        # ----------------------------------------------------
-        # PRIMARY AGENT
-        # ----------------------------------------------------
-
         if intent in primary_agents:
 
-            agents.append(
-                primary_agents[intent]
-            )
+            primary_agent = primary_agents[
+                intent
+            ]
+
+            if primary_agent not in agents:
+
+                agents.append(
+                    primary_agent
+                )
 
         # ----------------------------------------------------
         # DOMAIN CAPABILITY ROUTING
@@ -1226,7 +1384,7 @@ class IntelligenceBrain:
                 )
 
         # ----------------------------------------------------
-        # REASONING AS SUPPORTING AGENT
+        # REASONING SUPPORT
         # ----------------------------------------------------
 
         if (
@@ -1256,6 +1414,29 @@ class IntelligenceBrain:
                 )
 
         # ----------------------------------------------------
+        # MODE-SPECIFIC SUPPORT
+        # ----------------------------------------------------
+
+        if mode == "research":
+
+            if "ReasoningAgent" not in agents:
+
+                agents.append(
+                    "ReasoningAgent"
+                )
+
+        elif mode == "coding":
+
+            # Coding mode benefits from reasoning for
+            # implementation decisions and debugging.
+
+            if "ReasoningAgent" not in agents:
+
+                agents.append(
+                    "ReasoningAgent"
+                )
+
+        # ----------------------------------------------------
         # FALLBACK
         # ----------------------------------------------------
 
@@ -1282,13 +1463,20 @@ class IntelligenceBrain:
         reasoning = []
 
         reasoning.append(
-            f"Detected intent: {understanding.intent}"
+            f"Selected mode: "
+            f"{understanding.mode.upper()}"
+        )
+
+        reasoning.append(
+            f"Detected intent: "
+            f"{understanding.intent}"
         )
 
         if understanding.goal:
 
             reasoning.append(
-                f"Goal identified: {understanding.goal}"
+                f"Goal identified: "
+                f"{understanding.goal}"
             )
 
         reasoning.append(
@@ -1393,11 +1581,13 @@ if __name__ == "__main__":
 
     brain = IntelligenceBrain()
 
-    test_queries = [
+    # --------------------------------------------------------
+    # GENERAL MODE TESTS
+    # --------------------------------------------------------
+
+    general_tests = [
 
         "hello",
-
-        "explain ml",
 
         "what is machine learning",
 
@@ -1405,29 +1595,37 @@ if __name__ == "__main__":
 
         "compare TensorFlow and PyTorch",
 
-        "write python code to reverse a string",
-
-        "write Python code to analyze my dataset",
-
-        "build a machine learning model and improve its accuracy",
-
-        "research latest AI developments",
-
-        "debug Python code",
-
         "analyze CSV dataset",
 
-        "build a machine learning model using Python",
+        "build a machine learning model using Python"
+    ]
 
-        "analyze dataset and build ML model",
+    # --------------------------------------------------------
+    # RESEARCH MODE TESTS
+    # --------------------------------------------------------
 
-        "predict customer churn and improve model performance",
+    research_tests = [
 
-        "research latest AI models and compare them",
+        "what is artificial intelligence",
 
-        "write code for binary search",
+        "latest developments in AI",
 
-        "create a Python function to count character frequency"
+        "compare recent LLM architectures"
+    ]
+
+    # --------------------------------------------------------
+    # CODING MODE TESTS
+    # --------------------------------------------------------
+
+    coding_tests = [
+
+        "hello",
+
+        "write python code to reverse a string",
+
+        "debug this Python code",
+
+        "create a Flask API"
     ]
 
     print("\n" + "=" * 70)
@@ -1435,53 +1633,130 @@ if __name__ == "__main__":
     print("=" * 70)
 
     passed = 0
+    total = 0
 
-    for query in test_queries:
+    # --------------------------------------------------------
+    # RUN TESTS
+    # --------------------------------------------------------
 
-        decision = brain.think(query)
+    test_groups = [
 
-        print("\nQUERY:")
-        print(query)
+        ("GENERAL", general_tests),
 
-        print("\nINTENT:")
-        print(decision.understanding.intent)
+        ("RESEARCH", research_tests),
 
-        print("\nAGENTS:")
-        print(decision.recommended_agents)
+        ("CODING", coding_tests)
+    ]
 
-        print("\nCAPABILITIES:")
-        print(
-            decision.understanding.capabilities
-        )
+    for mode, queries in test_groups:
 
-        print("\nREQUIREMENTS:")
-        print(
-            decision.understanding.requirements
-        )
+        print("\n")
+        print("=" * 70)
+        print(f"{mode} MODE")
+        print("=" * 70)
 
-        print("\nCOMPLEXITY:")
-        print(
-            decision.understanding.complexity
-        )
+        for query in queries:
 
-        print("\nMULTI-AGENT:")
-        print(
-            decision.understanding.needs_multiple_agents
-        )
+            total += 1
 
-        print("\nCONFIDENCE:")
-        print(
-            decision.confidence
-        )
+            decision = brain.think(
+                query,
+                mode=mode.lower()
+            )
 
-        print("-" * 70)
+            understanding = decision.understanding
 
-        if decision.recommended_agents:
-            passed += 1
+            print("\nQUERY:")
+            print(query)
+
+            print("\nMODE:")
+            print(understanding.mode)
+
+            print("\nINTENT:")
+            print(understanding.intent)
+
+            print("\nAGENTS:")
+            print(decision.recommended_agents)
+
+            print("\nCAPABILITIES:")
+            print(
+                understanding.capabilities
+            )
+
+            print("\nREQUIREMENTS:")
+            print(
+                understanding.requirements
+            )
+
+            print("\nCOMPLEXITY:")
+            print(
+                understanding.complexity
+            )
+
+            print("\nMULTI-AGENT:")
+            print(
+                understanding.needs_multiple_agents
+            )
+
+            print("\nTOOLS:")
+            print(
+                understanding.needs_tools
+            )
+
+            print("\nCONFIDENCE:")
+            print(
+                decision.confidence
+            )
+
+            # ------------------------------------------------
+            # BASIC TEST VALIDATION
+            # ------------------------------------------------
+
+            valid = bool(
+                decision.recommended_agents
+            )
+
+            if mode == "RESEARCH":
+
+                valid = (
+                    valid
+                    and "ResearchAgent"
+                    in decision.recommended_agents
+                )
+
+            elif mode == "CODING":
+
+                valid = (
+                    valid
+                    and "CodingAgent"
+                    in decision.recommended_agents
+                )
+
+            if valid:
+
+                passed += 1
+                print("\nSTATUS: PASS")
+
+            else:
+
+                print("\nSTATUS: FAIL")
+
+            print("-" * 70)
+
+    # ========================================================
+    # SUMMARY
+    # ========================================================
 
     print("\n" + "=" * 70)
     print("BRAIN TEST SUMMARY")
     print("=" * 70)
+
     print(f"Passed: {passed}")
-    print(f"Total : {len(test_queries)}")
+    print(f"Total : {total}")
+
+    if passed == total:
+        print("STATUS: ALL TESTS PASSED")
+    else:
+        print("STATUS: SOME TESTS FAILED")
+
     print("=" * 70)
